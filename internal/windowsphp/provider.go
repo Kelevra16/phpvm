@@ -14,7 +14,13 @@ import (
 const releasesURL = "https://windows.php.net/downloads/releases/releases.json"
 const downloadBaseURL = "https://windows.php.net/downloads/releases/"
 
-type Release struct{ Version, URL, SHA256 string }
+type Release struct {
+	Version string `json:"version"`
+	Variant string `json:"variant"`
+	Arch    string `json:"arch"`
+	URL     string `json:"url"`
+	SHA256  string `json:"sha256"`
+}
 type Provider struct {
 	client   *http.Client
 	endpoint string
@@ -31,7 +37,7 @@ type archive struct {
 	} `json:"zip"`
 }
 
-func (p *Provider) Versions(ctx context.Context) ([]Release, error) {
+func (p *Provider) Versions(ctx context.Context, variant, targetArch string) ([]Release, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.endpoint, nil)
 	if err != nil {
 		return nil, err
@@ -49,10 +55,16 @@ func (p *Provider) Versions(ctx context.Context) ([]Release, error) {
 		return nil, fmt.Errorf("decode release registry: %w", err)
 	}
 	out := make([]Release, 0, len(data))
-	archSuffix := "-x64"
-	if runtime.GOARCH == "386" {
-		archSuffix = "-x86"
+	if variant == "" {
+		variant = "nts"
 	}
+	if targetArch == "" {
+		targetArch = "x64"
+		if runtime.GOARCH == "386" {
+			targetArch = "x86"
+		}
+	}
+	archSuffix := "-" + targetArch
 	for _, fields := range data {
 		var version string
 		if raw, ok := fields["version"]; ok {
@@ -60,7 +72,7 @@ func (p *Provider) Versions(ctx context.Context) ([]Release, error) {
 		}
 		var a archive
 		for name, raw := range fields {
-			if strings.HasPrefix(name, "nts-") && strings.HasSuffix(name, archSuffix) {
+			if strings.HasPrefix(name, variant+"-") && strings.HasSuffix(name, archSuffix) {
 				_ = json.Unmarshal(raw, &a)
 				break
 			}
@@ -72,14 +84,14 @@ func (p *Provider) Versions(ctx context.Context) ([]Release, error) {
 		if !strings.HasPrefix(url, "http") {
 			url = downloadBaseURL + strings.TrimPrefix(url, "/")
 		}
-		out = append(out, Release{Version: version, URL: url, SHA256: a.Zip.SHA256})
+		out = append(out, Release{Version: version, Variant: variant, Arch: targetArch, URL: url, SHA256: a.Zip.SHA256})
 	}
 	sort.Slice(out, func(i, j int) bool { return compare(out[i].Version, out[j].Version) > 0 })
 	return out, nil
 }
 
-func (p *Provider) Resolve(ctx context.Context, requested string) (Release, error) {
-	versions, err := p.Versions(ctx)
+func (p *Provider) Resolve(ctx context.Context, requested, variant, arch string) (Release, error) {
+	versions, err := p.Versions(ctx, variant, arch)
 	if err != nil {
 		return Release{}, err
 	}

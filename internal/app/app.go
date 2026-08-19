@@ -2,9 +2,12 @@ package app
 
 import (
 	"context"
+	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -14,12 +17,43 @@ import (
 )
 
 type App struct {
-	Version string
-	Out     io.Writer
-	Err     io.Writer
+	Version  string
+	Out, Err io.Writer
 }
 
 func New(version string) *App { return &App{Version: version, Out: os.Stdout, Err: os.Stderr} }
+
+type buildOptions struct {
+	variant, arch string
+	json, quiet   bool
+}
+
+func defaultOptions() buildOptions {
+	arch := "x64"
+	if runtime.GOARCH == "386" {
+		arch = "x86"
+	}
+	return buildOptions{variant: "nts", arch: arch}
+}
+func parseBuildFlags(name string, args []string) (buildOptions, []string, error) {
+	o := defaultOptions()
+	fs := flag.NewFlagSet(name, flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	ts := fs.Bool("ts", false, "")
+	fs.BoolVar(&o.json, "json", false, "")
+	fs.BoolVar(&o.quiet, "quiet", false, "")
+	fs.StringVar(&o.arch, "arch", o.arch, "")
+	if err := fs.Parse(args); err != nil {
+		return o, nil, err
+	}
+	if *ts {
+		o.variant = "ts"
+	}
+	if o.arch != "x64" && o.arch != "x86" {
+		return o, nil, fmt.Errorf("arch must be x64 or x86")
+	}
+	return o, fs.Args(), nil
+}
 
 func (a *App) Run(ctx context.Context, args []string) error {
 	root, err := rootDir()
@@ -30,7 +64,6 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return a.smart(ctx, s)
 	}
-
 	switch args[0] {
 	case "help", "-h", "--help":
 		a.help()
@@ -38,75 +71,63 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	case "version", "--version":
 		fmt.Fprintln(a.Out, "phpvm", a.Version)
 		return nil
-	case "current":
-		v, err := s.Current()
-		if err != nil {
-			return err
-		}
-		fmt.Fprintln(a.Out, v)
-		return nil
+	case "install", "use":
+		return a.installCommand(ctx, s, args[0], args[1:])
 	case "list", "ls":
-		versions, err := s.Installed()
-		if err != nil {
-			return err
-		}
-		current, _ := s.Current()
-		for _, v := range versions {
-			mark := "  "
-			if v == current {
-				mark = "* "
-			}
-			fmt.Fprintln(a.Out, mark+v)
-		}
-		return nil
+		return a.list(s, args[1:])
 	case "ls-remote":
-		p, err := provider()
+		return a.remote(ctx, args[1:])
+	case "current":
+		return a.current(s, args[1:])
+	case "verify":
+		return a.verify(s, args[1:])
+	case "repair":
+		return a.repair(ctx, s, args[1:])
+	case "doctor":
+		return a.doctor(s, args[1:])
+	case "clean":
+		removed, err := s.Clean()
 		if err != nil {
 			return err
 		}
-		versions, err := p.Versions(ctx)
-		if err != nil {
-			return err
-		}
-		for _, v := range versions {
-			fmt.Fprintln(a.Out, v.Version)
+		for _, p := range removed {
+			fmt.Fprintln(a.Out, "Removed", p)
 		}
 		return nil
-	case "install":
-		if len(args) != 2 {
-			return fmt.Errorf("usage: phpvm install <version>")
-		}
-		_, err := a.install(ctx, s, args[1])
-		return err
-	case "use":
-		if len(args) != 2 {
-			return fmt.Errorf("usage: phpvm use <version|latest|auto>")
-		}
-		v, err := a.install(ctx, s, args[1])
-		if err != nil {
-			return err
-		}
-		if err := s.Use(v); err != nil {
-			return err
-		}
-		fmt.Fprintf(a.Out, "Using PHP %s\n", v)
-		return nil
+	case "exec":
+		return a.execute(ctx, s, args[1:])
+	case "alias":
+		return a.alias(root, args[1:])
+	case "ini":
+		return a.ini(s, args[1:])
+	case "profile":
+		return a.profile(s, args[1:])
+	case "ext":
+		return a.extensions(s, args[1:])
+	case "sync":
+		return a.sync(ctx, s)
+	case "matrix":
+		return a.matrix(ctx, s, args[1:])
 	case "uninstall", "remove", "rm":
 		if len(args) != 2 {
-			return fmt.Errorf("usage: phpvm uninstall <version>")
+			return fmt.Errorf("usage: phpvm uninstall <build>")
 		}
-		if err := s.Uninstall(args[1]); err != nil {
+		id, err := resolveInstalled(s, args[1])
+		if err != nil {
 			return err
 		}
-		fmt.Fprintf(a.Out, "Removed PHP %s\n", args[1])
+		if err := s.Uninstall(id); err != nil {
+			return err
+		}
+		fmt.Fprintln(a.Out, "Removed", id)
 		return nil
 	case "prune":
 		removed, err := s.Prune()
 		if err != nil {
 			return err
 		}
-		for _, v := range removed {
-			fmt.Fprintf(a.Out, "Removed PHP %s\n", v)
+		for _, id := range removed {
+			fmt.Fprintln(a.Out, "Removed", id)
 		}
 		return nil
 	default:
@@ -114,56 +135,389 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	}
 }
 
-func (a *App) smart(ctx context.Context, s *store.Store) error {
-	v, file, err := findVersionFile()
+func (a *App) installCommand(ctx context.Context, s *store.Store, command string, args []string) error {
+	o, rest, err := parseBuildFlags(command, args)
 	if err != nil {
 		return err
 	}
-	if v == "" {
-		a.help()
-		return nil
+	if len(rest) != 1 {
+		return fmt.Errorf("usage: phpvm %s [--ts] [--arch x64|x86] <version>", command)
 	}
-	fmt.Fprintf(a.Out, "Found %s (%s)\n", v, file)
-	resolved, err := a.install(ctx, s, v)
+	id, err := a.install(ctx, s, rest[0], o)
 	if err != nil {
 		return err
 	}
-	if err := s.Use(resolved); err != nil {
-		return err
+	if command == "use" {
+		if err := s.Use(id); err != nil {
+			return err
+		}
+		if !o.quiet {
+			fmt.Fprintln(a.Out, "Using PHP", id)
+		}
 	}
-	fmt.Fprintf(a.Out, "Using PHP %s\n", resolved)
+	if o.json {
+		return json.NewEncoder(a.Out).Encode(map[string]string{"build": id})
+	}
 	return nil
 }
-
-func (a *App) install(ctx context.Context, s *store.Store, requested string) (string, error) {
+func (a *App) install(ctx context.Context, s *store.Store, requested string, o buildOptions) (string, error) {
+	if alias, ok, _ := readAliases(s.Root); ok {
+		if v, found := alias[requested]; found {
+			requested = v
+		}
+	}
 	if requested == "auto" {
-		v, _, err := findVersionFile()
+		cfg, err := findProjectConfig()
 		if err != nil {
 			return "", err
 		}
-		if v == "" {
-			return "", fmt.Errorf("no .php-version found")
+		if cfg.Version == "" {
+			return "", fmt.Errorf("no project PHP version found")
 		}
-		requested = v
+		requested = cfg.Version
+		if cfg.Variant != "" {
+			o.variant = cfg.Variant
+		}
+		if cfg.Arch != "" {
+			o.arch = cfg.Arch
+		}
 	}
 	p, err := provider()
 	if err != nil {
 		return "", err
 	}
-	rel, err := p.Resolve(ctx, requested)
+	rel, err := p.Resolve(ctx, requested, o.variant, o.arch)
 	if err != nil {
 		return "", err
 	}
-	if s.IsInstalled(rel.Version) {
-		fmt.Fprintf(a.Out, "PHP %s is already installed\n", rel.Version)
-		return rel.Version, nil
+	m := store.Metadata{Version: rel.Version, Variant: rel.Variant, Arch: rel.Arch, URL: rel.URL, ArchiveSHA256: rel.SHA256}
+	if s.IsInstalled(m.ID()) {
+		if !o.quiet {
+			fmt.Fprintln(a.Out, "PHP", m.ID(), "is already installed")
+		}
+		return m.ID(), nil
 	}
-	fmt.Fprintf(a.Out, "Installing PHP %s...\n", rel.Version)
-	if err := s.Install(ctx, rel.Version, rel.URL, rel.SHA256); err != nil {
+	if !o.quiet {
+		fmt.Fprintln(a.Out, "Installing PHP", m.ID()+"...")
+	}
+	if err := s.Install(ctx, m); err != nil {
 		return "", err
 	}
-	fmt.Fprintf(a.Out, "Installed PHP %s\n", rel.Version)
-	return rel.Version, nil
+	if !o.quiet {
+		fmt.Fprintln(a.Out, "Installed PHP", m.ID())
+	}
+	return m.ID(), nil
+}
+func (a *App) smart(ctx context.Context, s *store.Store) error {
+	cfg, err := findProjectConfig()
+	if err != nil {
+		return err
+	}
+	if cfg.Version == "" {
+		a.help()
+		return nil
+	}
+	o := defaultOptions()
+	if cfg.Variant != "" {
+		o.variant = cfg.Variant
+	}
+	if cfg.Arch != "" {
+		o.arch = cfg.Arch
+	}
+	id, err := a.install(ctx, s, cfg.Version, o)
+	if err != nil {
+		return err
+	}
+	if err := s.Use(id); err != nil {
+		return err
+	}
+	fmt.Fprintln(a.Out, "Using PHP", id)
+	return nil
+}
+
+func (a *App) list(s *store.Store, args []string) error {
+	asJSON := len(args) == 1 && args[0] == "--json"
+	builds, err := s.Installed()
+	if err != nil {
+		return err
+	}
+	current, _ := s.Current()
+	if asJSON {
+		return json.NewEncoder(a.Out).Encode(map[string]any{"current": current, "builds": builds})
+	}
+	for _, m := range builds {
+		mark := "  "
+		if m.ID() == current {
+			mark = "* "
+		}
+		fmt.Fprintln(a.Out, mark+m.ID())
+	}
+	return nil
+}
+func (a *App) remote(ctx context.Context, args []string) error {
+	o, rest, err := parseBuildFlags("ls-remote", args)
+	if err != nil || len(rest) > 0 {
+		if err != nil {
+			return err
+		}
+		return fmt.Errorf("usage: phpvm ls-remote [--ts] [--arch x64|x86] [--json]")
+	}
+	p, err := provider()
+	if err != nil {
+		return err
+	}
+	v, err := p.Versions(ctx, o.variant, o.arch)
+	if err != nil {
+		return err
+	}
+	if o.json {
+		return json.NewEncoder(a.Out).Encode(v)
+	}
+	for _, r := range v {
+		fmt.Fprintln(a.Out, r.Version, r.Variant, r.Arch)
+	}
+	return nil
+}
+func (a *App) current(s *store.Store, args []string) error {
+	id, err := s.Current()
+	if err != nil {
+		return err
+	}
+	m, err := s.Metadata(id)
+	if err != nil {
+		return err
+	}
+	if len(args) == 1 && args[0] == "--json" {
+		return json.NewEncoder(a.Out).Encode(m)
+	}
+	fmt.Fprintln(a.Out, id)
+	return nil
+}
+func (a *App) verify(s *store.Store, args []string) error {
+	id, err := targetBuild(s, args)
+	if err != nil {
+		return err
+	}
+	if err := s.Verify(id); err != nil {
+		return fmt.Errorf("%s: %w", id, err)
+	}
+	fmt.Fprintln(a.Out, id, "OK")
+	return nil
+}
+func (a *App) repair(ctx context.Context, s *store.Store, args []string) error {
+	id, err := targetBuild(s, args)
+	if err != nil {
+		return err
+	}
+	if err := s.Repair(ctx, id); err != nil {
+		return err
+	}
+	fmt.Fprintln(a.Out, "Repaired", id)
+	return nil
+}
+func targetBuild(s *store.Store, args []string) (string, error) {
+	if len(args) > 1 {
+		return "", fmt.Errorf("expected zero or one build")
+	}
+	if len(args) == 0 {
+		return s.Current()
+	}
+	return resolveInstalled(s, args[0])
+}
+func resolveInstalled(s *store.Store, q string) (string, error) {
+	if s.IsInstalled(q) {
+		return q, nil
+	}
+	builds, err := s.Installed()
+	if err != nil {
+		return "", err
+	}
+	var matches []string
+	for _, m := range builds {
+		if m.Version == q || strings.HasPrefix(m.ID(), q+"-") {
+			matches = append(matches, m.ID())
+		}
+	}
+	if len(matches) == 1 {
+		return matches[0], nil
+	}
+	if len(matches) > 1 {
+		return "", fmt.Errorf("%s matches multiple builds: %s", q, strings.Join(matches, ", "))
+	}
+	return "", fmt.Errorf("PHP build %s is not installed", q)
+}
+
+func (a *App) doctor(s *store.Store, args []string) error {
+	type check struct {
+		Name   string `json:"name"`
+		OK     bool   `json:"ok"`
+		Detail string `json:"detail"`
+	}
+	var checks []check
+	id, err := s.Current()
+	checks = append(checks, check{"active build", err == nil, first(err, id)})
+	if err == nil {
+		e := s.Verify(id)
+		checks = append(checks, check{"active executable", e == nil, first(e, "checksum valid")})
+	}
+	_, e := os.Stat(filepath.Join(s.Root, "bin", "php.cmd"))
+	checks = append(checks, check{"PATH wrapper", e == nil, first(e, filepath.Join(s.Root, "bin", "php.cmd"))})
+	found, e := exec.LookPath("php")
+	expected := strings.HasPrefix(strings.ToLower(found), strings.ToLower(filepath.Join(s.Root, "bin")))
+	checks = append(checks, check{"php resolution", e == nil && expected, first(e, found)})
+	asJSON := len(args) == 1 && args[0] == "--json"
+	if asJSON {
+		return json.NewEncoder(a.Out).Encode(checks)
+	}
+	failed := false
+	for _, c := range checks {
+		mark := "OK"
+		if !c.OK {
+			mark = "FAIL"
+			failed = true
+		}
+		fmt.Fprintf(a.Out, "%-4s %-20s %s\n", mark, c.Name, c.Detail)
+	}
+	if failed {
+		return fmt.Errorf("doctor found problems")
+	}
+	return nil
+}
+func first(err error, ok string) string {
+	if err != nil {
+		return err.Error()
+	}
+	return ok
+}
+
+func (a *App) execute(ctx context.Context, s *store.Store, args []string) error {
+	sep := -1
+	for i, v := range args {
+		if v == "--" {
+			sep = i
+			break
+		}
+	}
+	if sep < 0 || sep == len(args)-1 {
+		return fmt.Errorf("usage: phpvm exec [version] -- <command> [args...]")
+	}
+	id := ""
+	var err error
+	if sep == 0 {
+		id, err = s.Current()
+	} else {
+		o := defaultOptions()
+		id, err = a.install(ctx, s, args[0], o)
+	}
+	if err != nil {
+		return err
+	}
+	cmd := exec.CommandContext(ctx, args[sep+1], args[sep+2:]...)
+	cmd.Env = append(os.Environ(), "PATH="+filepath.Dir(s.Executable(id))+string(os.PathListSeparator)+os.Getenv("PATH"), "PHPVM_ACTIVE="+id)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = a.Out
+	cmd.Stderr = a.Err
+	return cmd.Run()
+}
+
+func (a *App) alias(root string, args []string) error {
+	aliases, _, err := readAliases(root)
+	if err != nil {
+		return err
+	}
+	if len(args) == 0 || args[0] == "ls" {
+		for k, v := range aliases {
+			fmt.Fprintln(a.Out, k, v)
+		}
+		return nil
+	}
+	if len(args) == 3 && args[0] == "set" {
+		aliases[args[1]] = args[2]
+		return writeJSON(filepath.Join(root, "aliases.json"), aliases)
+	}
+	if len(args) == 2 && args[0] == "remove" {
+		delete(aliases, args[1])
+		return writeJSON(filepath.Join(root, "aliases.json"), aliases)
+	}
+	return fmt.Errorf("usage: phpvm alias [ls|set <name> <version>|remove <name>]")
+}
+func readAliases(root string) (map[string]string, bool, error) {
+	m := map[string]string{}
+	b, err := os.ReadFile(filepath.Join(root, "aliases.json"))
+	if os.IsNotExist(err) {
+		return m, true, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	return m, true, json.Unmarshal(b, &m)
+}
+func writeJSON(path string, v any) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return err
+	}
+	b, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(b, '\n'), 0644)
+}
+
+func (a *App) sync(ctx context.Context, s *store.Store) error {
+	cfg, err := findProjectConfig()
+	if err != nil {
+		return err
+	}
+	if cfg.Version == "" {
+		return fmt.Errorf("no .php-version, phpvm.toml, composer.lock, or composer.json found")
+	}
+	o := defaultOptions()
+	if cfg.Variant != "" {
+		o.variant = cfg.Variant
+	}
+	if cfg.Arch != "" {
+		o.arch = cfg.Arch
+	}
+	id, err := a.install(ctx, s, cfg.Version, o)
+	if err != nil {
+		return err
+	}
+	if err := s.Use(id); err != nil {
+		return err
+	}
+	for k, v := range cfg.INI {
+		if err := setINI(filepath.Join(filepath.Dir(s.Executable(id)), "php.ini"), k, v); err != nil {
+			return err
+		}
+	}
+	fmt.Fprintln(a.Out, "Synchronized", id)
+	return nil
+}
+func (a *App) matrix(ctx context.Context, s *store.Store, args []string) error {
+	sep := -1
+	for i, v := range args {
+		if v == "--" {
+			sep = i
+			break
+		}
+	}
+	if sep < 1 || sep == len(args)-1 {
+		return fmt.Errorf("usage: phpvm matrix <versions...> -- <command>")
+	}
+	failed := false
+	for _, v := range args[:sep] {
+		fmt.Fprintln(a.Out, "==> PHP", v)
+		if err := a.execute(ctx, s, append([]string{v, "--"}, args[sep+1:]...)); err != nil {
+			failed = true
+			fmt.Fprintln(a.Err, v, "FAIL:", err)
+		} else {
+			fmt.Fprintln(a.Out, v, "PASS")
+		}
+	}
+	if failed {
+		return fmt.Errorf("one or more matrix jobs failed")
+	}
+	return nil
 }
 
 func provider() (*windowsphp.Provider, error) {
@@ -172,7 +526,6 @@ func provider() (*windowsphp.Provider, error) {
 	}
 	return windowsphp.New(), nil
 }
-
 func rootDir() (string, error) {
 	if v := os.Getenv("PHPVM_ROOT"); v != "" {
 		return filepath.Abs(v)
@@ -184,43 +537,19 @@ func rootDir() (string, error) {
 	return filepath.Join(home, ".phpvm"), nil
 }
 
-func findVersionFile() (string, string, error) {
-	dir, err := os.Getwd()
-	if err != nil {
-		return "", "", err
-	}
-	for {
-		path := filepath.Join(dir, ".php-version")
-		b, err := os.ReadFile(path)
-		if err == nil {
-			return strings.TrimSpace(string(b)), path, nil
-		}
-		if !os.IsNotExist(err) {
-			return "", "", err
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return "", "", nil
-		}
-		dir = parent
-	}
-}
-
 func (a *App) help() {
-	fmt.Fprint(a.Out, `phpvm - a small PHP version manager
+	fmt.Fprint(a.Out, `phpvm - PHP version and environment manager
 
 Usage:
-  phpvm                         Use the version from .php-version
-  phpvm use <version|latest>    Install and activate a PHP version
-  phpvm install <version>       Install without activating
-  phpvm ls                      List installed versions
-  phpvm ls-remote               List available versions
-  phpvm current                 Show the active version
-  phpvm uninstall <version>     Remove an installed version
-  phpvm prune                   Remove every version except the active one
-  phpvm version                 Show phpvm's version
-
-Environment:
-  PHPVM_ROOT                    Storage root (default: ~/.phpvm)
+  phpvm use [--ts] [--arch x64|x86] <version>
+  phpvm install [--ts] [--arch x64|x86] <version>
+  phpvm ls [--json]                 phpvm ls-remote [--ts] [--json]
+  phpvm current [--json]            phpvm verify [build]
+  phpvm repair [build]              phpvm doctor [--json]
+  phpvm exec [version] -- <command> phpvm matrix <versions...> -- <command>
+  phpvm alias [ls|set|remove]        phpvm sync
+  phpvm ini <get|set>                phpvm profile <ls|create|set|use>
+  phpvm ext <ls|enable|disable>
+  phpvm uninstall <build>            phpvm prune | clean
 `)
 }
