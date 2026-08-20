@@ -1,3 +1,5 @@
 /phpvm.exe
 /dist/
-
+/.e2e-root/
+/.logs-e2e/
+/.test-root/

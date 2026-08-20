@@ -12,8 +12,8 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/megaj/phpvm/internal/store"
-	"github.com/megaj/phpvm/internal/windowsphp"
+	"github.com/Kelevra16/phpvm/internal/store"
+	"github.com/Kelevra16/phpvm/internal/windowsphp"
 )
 
 type App struct {
@@ -24,8 +24,8 @@ type App struct {
 func New(version string) *App { return &App{Version: version, Out: os.Stdout, Err: os.Stderr} }
 
 type buildOptions struct {
-	variant, arch string
-	json, quiet   bool
+	variant, arch           string
+	json, quiet, noProgress bool
 }
 
 func defaultOptions() buildOptions {
@@ -42,6 +42,7 @@ func parseBuildFlags(name string, args []string) (buildOptions, []string, error)
 	ts := fs.Bool("ts", false, "")
 	fs.BoolVar(&o.json, "json", false, "")
 	fs.BoolVar(&o.quiet, "quiet", false, "")
+	fs.BoolVar(&o.noProgress, "no-progress", false, "")
 	fs.StringVar(&o.arch, "arch", o.arch, "")
 	if err := fs.Parse(args); err != nil {
 		return o, nil, err
@@ -104,6 +105,8 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return a.profile(s, args[1:])
 	case "ext":
 		return a.extensions(s, args[1:])
+	case "logs", "log":
+		return a.logs(ctx, s, args[1:])
 	case "sync":
 		return a.sync(ctx, s)
 	case "matrix":
@@ -182,7 +185,7 @@ func (a *App) install(ctx context.Context, s *store.Store, requested string, o b
 			o.arch = cfg.Arch
 		}
 	}
-	p, err := provider()
+	p, err := provider(s.Root)
 	if err != nil {
 		return "", err
 	}
@@ -199,6 +202,20 @@ func (a *App) install(ctx context.Context, s *store.Store, requested string, o b
 	}
 	if !o.quiet {
 		fmt.Fprintln(a.Out, "Installing PHP", m.ID()+"...")
+	}
+	if !o.quiet && !o.noProgress {
+		last := -1
+		s.Progress = func(done, total int64) {
+			if total <= 0 {
+				return
+			}
+			percent := int(done * 100 / total)
+			if percent/10 != last/10 {
+				fmt.Fprintf(a.Out, "Downloading %d%%\n", percent)
+				last = percent
+			}
+		}
+		defer func() { s.Progress = nil }()
 	}
 	if err := s.Install(ctx, m); err != nil {
 		return "", err
@@ -262,7 +279,8 @@ func (a *App) remote(ctx context.Context, args []string) error {
 		}
 		return fmt.Errorf("usage: phpvm ls-remote [--ts] [--arch x64|x86] [--json]")
 	}
-	p, err := provider()
+	root, _ := rootDir()
+	p, err := provider(root)
 	if err != nil {
 		return err
 	}
@@ -520,11 +538,11 @@ func (a *App) matrix(ctx context.Context, s *store.Store, args []string) error {
 	return nil
 }
 
-func provider() (*windowsphp.Provider, error) {
+func provider(root string) (*windowsphp.Provider, error) {
 	if runtime.GOOS != "windows" {
 		return nil, fmt.Errorf("binary installation currently supports Windows only")
 	}
-	return windowsphp.New(), nil
+	return windowsphp.New(root), nil
 }
 func rootDir() (string, error) {
 	if v := os.Getenv("PHPVM_ROOT"); v != "" {
@@ -541,15 +559,15 @@ func (a *App) help() {
 	fmt.Fprint(a.Out, `phpvm - PHP version and environment manager
 
 Usage:
-  phpvm use [--ts] [--arch x64|x86] <version>
-  phpvm install [--ts] [--arch x64|x86] <version>
+  phpvm use [--ts] [--arch x64|x86] [--no-progress] <version>
+  phpvm install [--ts] [--arch x64|x86] [--no-progress] <version>
   phpvm ls [--json]                 phpvm ls-remote [--ts] [--json]
   phpvm current [--json]            phpvm verify [build]
   phpvm repair [build]              phpvm doctor [--json]
   phpvm exec [version] -- <command> phpvm matrix <versions...> -- <command>
   phpvm alias [ls|set|remove]        phpvm sync
   phpvm ini <get|set>                phpvm profile <ls|create|set|use>
-  phpvm ext <ls|enable|disable>
+  phpvm ext <ls|enable|disable>       phpvm logs <path|show|tail|open|clear|doctor>
   phpvm uninstall <build>            phpvm prune | clean
 `)
 }

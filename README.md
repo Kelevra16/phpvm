@@ -11,6 +11,8 @@ go test ./...
 go build -o phpvm.exe ./cmd/phpvm
 ```
 
+Go 1.20 or newer is supported.
+
 Put `phpvm.exe` on `PATH`, then add `%USERPROFILE%\.phpvm\bin` to `PATH` once. Set `PHPVM_ROOT` to use a different storage root.
 
 ## Version management
@@ -27,6 +29,8 @@ phpvm current [--json]           active build and metadata
 phpvm uninstall <build>
 phpvm prune                      retain only the active build
 ```
+
+Use `--no-progress` for non-interactive environments or `--quiet` to suppress status output.
 
 A build identity includes all compatibility dimensions, for example `8.4.24-nts-x64`. This allows TS/NTS or x64/x86 builds of the same version to coexist.
 
@@ -57,6 +61,14 @@ Apply the complete project environment with:
 phpvm sync
 ```
 
+Projects can keep their PHP errors locally:
+
+```toml
+[logs]
+scope = "project"
+path = ".phpvm/php-error.log"
+```
+
 Composer constraints are currently reduced to their first explicit major/minor selector. Complex constraint solving is not yet supported.
 
 ## Configuration, profiles, and extensions
@@ -64,6 +76,10 @@ Composer constraints are currently reduced to their first explicit major/minor s
 ```text
 phpvm ini get memory_limit
 phpvm ini set memory_limit 1G
+phpvm ini path
+phpvm ini show
+phpvm ini diff
+phpvm ini reset
 
 phpvm profile create laravel
 phpvm profile set laravel memory_limit 1G
@@ -76,6 +92,23 @@ phpvm ext disable curl
 ```
 
 Extension management currently enables or disables DLLs already included in an official PHP distribution. Downloading and resolving external PECL packages is a separate future provider.
+
+## Error logs
+
+PHP error logging is configured automatically for the active build. The default location is `~/.phpvm/logs/<build>/php-error.log`; `phpvm.toml` can override it per project.
+
+```text
+phpvm logs path
+phpvm logs show
+phpvm logs show --lines 200
+phpvm logs tail --lines 50
+phpvm logs tail --follow
+phpvm logs open
+phpvm logs doctor
+phpvm logs clear --force
+```
+
+`logs open` uses the operating system's default application. `tail --follow` continues until interrupted with Ctrl+C. Clearing a log requires `--force` so scripts cannot erase it accidentally.
 
 ## Reproducible commands and matrices
 
@@ -122,6 +155,26 @@ Installations are transactional:
 
 Each build contains `phpvm.json` with its version, variant, architecture, source URL, checksums, and installation timestamp. `verify` detects later changes to `php.exe`; `repair` replaces a build from its recorded official source while preserving the active identity.
 
+The official release registry is cached for six hours. Set `PHPVM_CACHE_TTL` to a Go duration such as `30m` or `24h`. Set `PHPVM_TIMEOUT` to bound a command, for example `PHPVM_TIMEOUT=10m`.
+
+Exit codes are stable: `0` success, `1` operational failure, `2` invalid usage, and `124` timeout. Child commands executed through `phpvm exec` retain their own non-zero exit code.
+
+## Install a release
+
+Once releases are published to GitHub:
+
+```powershell
+irm https://raw.githubusercontent.com/Kelevra16/phpvm/main/install.ps1 | iex
+```
+
+The installer selects x64/x86 automatically and verifies the archive against the release SHA-256 manifest. To uninstall the executable while retaining installed PHP versions:
+
+```powershell
+.\uninstall.ps1
+```
+
+Pass `-RemoveData` only when all managed PHP versions, profiles, logs, and configuration should also be removed.
+
 ## Storage layout
 
 ```text
@@ -146,4 +199,3 @@ Each build contains `phpvm.json` with its version, variant, architecture, source
 - PowerShell, Bash, and Zsh completions
 - self-update, signed release artifacts, and CI release automation
 - opt-in lifecycle hooks
-

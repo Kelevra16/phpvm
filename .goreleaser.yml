@@ -1,0 +1,24 @@
+version: 2
+
+project_name: phpvm
+
+builds:
+  - id: windows
+    main: ./cmd/phpvm
+    binary: phpvm
+    goos: [windows]
+    goarch: [amd64, "386"]
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
+archives:
+  - ids: [windows]
+    formats: [zip]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+

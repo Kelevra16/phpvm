@@ -12,6 +12,7 @@ import (
 type projectConfig struct {
 	Version, Variant, Arch, Source string
 	INI                            map[string]string
+	LogScope, LogPath              string
 }
 
 var phpConstraint = regexp.MustCompile(`(?:\^|~|>=?\s*)?(\d+\.\d+)(?:\.\d+)?`)
@@ -94,6 +95,15 @@ func parseTOML(text string) projectConfig {
 		v := strings.Trim(strings.TrimSpace(parts[1]), "\"")
 		if section == "ini" {
 			c.INI[k] = v
+			continue
+		}
+		if section == "logs" {
+			if k == "scope" {
+				c.LogScope = v
+			}
+			if k == "path" {
+				c.LogPath = v
+			}
 			continue
 		}
 		switch k {

@@ -1,4 +1,3 @@
-module github.com/megaj/phpvm
+module github.com/Kelevra16/phpvm
 
-go 1.24
-
+go 1.20

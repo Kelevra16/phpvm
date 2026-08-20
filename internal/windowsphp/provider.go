@@ -1,10 +1,14 @@
 package windowsphp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
@@ -22,12 +26,23 @@ type Release struct {
 	SHA256  string `json:"sha256"`
 }
 type Provider struct {
-	client   *http.Client
-	endpoint string
+	client    *http.Client
+	endpoint  string
+	cachePath string
+	cacheTTL  time.Duration
 }
 
-func New() *Provider {
-	return &Provider{client: &http.Client{Timeout: 30 * time.Second}, endpoint: releasesURL}
+func New(cacheRoot ...string) *Provider {
+	p := &Provider{client: &http.Client{Timeout: 30 * time.Second}, endpoint: releasesURL, cacheTTL: 6 * time.Hour}
+	if len(cacheRoot) > 0 && cacheRoot[0] != "" {
+		p.cachePath = filepath.Join(cacheRoot[0], "cache", "windows-releases.json")
+	}
+	if v := os.Getenv("PHPVM_CACHE_TTL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			p.cacheTTL = d
+		}
+	}
+	return p
 }
 
 type archive struct {
@@ -38,20 +53,12 @@ type archive struct {
 }
 
 func (p *Provider) Versions(ctx context.Context, variant, targetArch string) ([]Release, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.endpoint, nil)
+	payload, err := p.registry(ctx)
 	if err != nil {
 		return nil, err
-	}
-	resp, err := p.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("release registry returned %s", resp.Status)
 	}
 	var data map[string]map[string]json.RawMessage
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+	if err := json.NewDecoder(bytes.NewReader(payload)).Decode(&data); err != nil {
 		return nil, fmt.Errorf("decode release registry: %w", err)
 	}
 	out := make([]Release, 0, len(data))
@@ -88,6 +95,38 @@ func (p *Provider) Versions(ctx context.Context, variant, targetArch string) ([]
 	}
 	sort.Slice(out, func(i, j int) bool { return compare(out[i].Version, out[j].Version) > 0 })
 	return out, nil
+}
+
+func (p *Provider) registry(ctx context.Context) ([]byte, error) {
+	if p.cachePath != "" {
+		if st, err := os.Stat(p.cachePath); err == nil && time.Since(st.ModTime()) < p.cacheTTL {
+			if b, err := os.ReadFile(p.cachePath); err == nil {
+				return b, nil
+			}
+		}
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("release registry returned %s", resp.Status)
+	}
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if p.cachePath != "" {
+		if err := os.MkdirAll(filepath.Dir(p.cachePath), 0755); err == nil {
+			_ = os.WriteFile(p.cachePath, b, 0644)
+		}
+	}
+	return b, nil
 }
 
 func (p *Provider) Resolve(ctx context.Context, requested, variant, arch string) (Release, error) {

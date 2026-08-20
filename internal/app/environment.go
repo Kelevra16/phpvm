@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/megaj/phpvm/internal/store"
+	"github.com/Kelevra16/phpvm/internal/store"
 )
 
 func activeDir(s *store.Store) (string, string, error) {
@@ -47,6 +47,24 @@ func (a *App) ini(s *store.Store, args []string) error {
 	if err != nil {
 		return err
 	}
+	if len(args) == 1 && args[0] == "path" {
+		fmt.Fprintln(a.Out, path)
+		return nil
+	}
+	if len(args) == 1 && args[0] == "show" {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		_, err = a.Out.Write(b)
+		return err
+	}
+	if len(args) == 1 && args[0] == "reset" {
+		return resetINI(dir)
+	}
+	if len(args) == 1 && args[0] == "diff" {
+		return a.diffINI(dir, path)
+	}
 	if len(args) == 3 && args[0] == "set" {
 		if err := setINI(path, args[1], args[2]); err != nil {
 			return err
@@ -66,7 +84,44 @@ func (a *App) ini(s *store.Store, args []string) error {
 		fmt.Fprintln(a.Out, v)
 		return nil
 	}
-	return fmt.Errorf("usage: phpvm ini get <key> | phpvm ini set <key> <value>")
+	return fmt.Errorf("usage: phpvm ini path|show|diff|reset|get <key>|set <key> <value>")
+}
+
+func resetINI(dir string) error {
+	path := filepath.Join(dir, "php.ini")
+	for _, name := range []string{"php.ini-development", "php.ini-production"} {
+		b, err := os.ReadFile(filepath.Join(dir, name))
+		if err == nil {
+			if err := os.WriteFile(path, b, 0644); err != nil {
+				return err
+			}
+			_, err = ensureINI(dir)
+			return err
+		}
+	}
+	return fmt.Errorf("PHP INI template not found")
+}
+func (a *App) diffINI(dir, path string) error {
+	current, err := readINI(path)
+	if err != nil {
+		return err
+	}
+	template := filepath.Join(dir, "php.ini-development")
+	base, err := readINI(template)
+	if err != nil {
+		return err
+	}
+	keys := make([]string, 0)
+	for k, v := range current {
+		if base[k] != v {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		fmt.Fprintf(a.Out, "- %s = %s\n+ %s = %s\n", k, base[k], k, current[k])
+	}
+	return nil
 }
 func readINI(path string) (map[string]string, error) {
 	out := map[string]string{}
@@ -152,7 +207,7 @@ func (a *App) profile(s *store.Store, args []string) error {
 			}
 		}
 		fmt.Fprintln(a.Out, "Applied profile", args[1])
-		return nil
+		return os.WriteFile(filepath.Join(s.Root, "active-profile"), []byte(args[1]+"\n"), 0644)
 	}
 	return fmt.Errorf("usage: phpvm profile ls|create <name>|set <name> <key> <value>|use <name>")
 }

@@ -62,3 +62,17 @@ func TestZipTraversalRejected(t *testing.T) {
 		t.Fatal("expected traversal error")
 	}
 }
+
+func TestAbandonedLockIsRecovered(t *testing.T) {
+	s := New(t.TempDir())
+	if err := os.WriteFile(filepath.Join(s.Root, ".lock"), []byte("999999999\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	if err := s.WithLock(context.Background(), func() error { called = true; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if !called {
+		t.Fatal("locked operation was not called")
+	}
+}

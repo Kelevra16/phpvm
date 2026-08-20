@@ -11,8 +11,11 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -29,7 +32,10 @@ type Metadata struct {
 
 func (m Metadata) ID() string { return m.Version + "-" + m.Variant + "-" + m.Arch }
 
-type Store struct{ Root string }
+type Store struct {
+	Root     string
+	Progress func(downloaded, total int64)
+}
 
 func New(root string) *Store                   { return &Store{Root: root} }
 func (s *Store) versionsDir() string           { return filepath.Join(s.Root, "versions") }
@@ -83,6 +89,9 @@ func (s *Store) Current() (string, error) {
 	return strings.TrimSpace(string(b)), nil
 }
 func (s *Store) Use(id string) error {
+	return s.WithLock(context.Background(), func() error { return s.useUnlocked(id) })
+}
+func (s *Store) useUnlocked(id string) error {
 	if !s.IsInstalled(id) {
 		return fmt.Errorf("PHP build %s is not installed", id)
 	}
@@ -99,11 +108,9 @@ func (s *Store) Use(id string) error {
 }
 
 func (s *Store) Install(ctx context.Context, m Metadata) error {
-	release, err := s.lock(ctx)
-	if err != nil {
-		return err
-	}
-	defer release()
+	return s.WithLock(ctx, func() error { return s.installUnlocked(ctx, m) })
+}
+func (s *Store) installUnlocked(ctx context.Context, m Metadata) error {
 	if s.IsInstalled(m.ID()) {
 		return nil
 	}
@@ -132,7 +139,8 @@ func (s *Store) Install(ctx context.Context, m Metadata) error {
 		return fmt.Errorf("download returned %s", resp.Status)
 	}
 	h := sha256.New()
-	if _, err := io.Copy(io.MultiWriter(tmp, h), resp.Body); err != nil {
+	pw := &progressWriter{total: resp.ContentLength, fn: s.Progress}
+	if _, err := io.Copy(io.MultiWriter(tmp, h, pw), resp.Body); err != nil {
 		tmp.Close()
 		return err
 	}
@@ -170,6 +178,19 @@ func (s *Store) Install(ctx context.Context, m Metadata) error {
 	return nil
 }
 
+type progressWriter struct {
+	downloaded, total int64
+	fn                func(int64, int64)
+}
+
+func (p *progressWriter) Write(b []byte) (int, error) {
+	p.downloaded += int64(len(b))
+	if p.fn != nil {
+		p.fn(p.downloaded, p.total)
+	}
+	return len(b), nil
+}
+
 func (s *Store) Verify(id string) error {
 	m, err := s.Metadata(id)
 	if err != nil {
@@ -185,6 +206,9 @@ func (s *Store) Verify(id string) error {
 	return nil
 }
 func (s *Store) Repair(ctx context.Context, id string) error {
+	return s.WithLock(ctx, func() error { return s.repairUnlocked(ctx, id) })
+}
+func (s *Store) repairUnlocked(ctx context.Context, id string) error {
 	m, err := s.Metadata(id)
 	if err != nil {
 		return err
@@ -195,13 +219,16 @@ func (s *Store) Repair(ctx context.Context, id string) error {
 	if err := os.Rename(dest, backup); err != nil {
 		return err
 	}
-	if err := s.Install(ctx, m); err != nil {
+	if err := s.installUnlocked(ctx, m); err != nil {
 		_ = os.Rename(backup, dest)
 		return err
 	}
 	return os.RemoveAll(backup)
 }
 func (s *Store) Uninstall(id string) error {
+	return s.WithLock(context.Background(), func() error { return s.uninstallUnlocked(id) })
+}
+func (s *Store) uninstallUnlocked(id string) error {
 	current, _ := s.Current()
 	if current == id {
 		return fmt.Errorf("cannot remove active build %s", id)
@@ -212,6 +239,11 @@ func (s *Store) Uninstall(id string) error {
 	return os.RemoveAll(s.installation(id))
 }
 func (s *Store) Prune() ([]string, error) {
+	var removed []string
+	err := s.WithLock(context.Background(), func() error { var err error; removed, err = s.pruneUnlocked(); return err })
+	return removed, err
+}
+func (s *Store) pruneUnlocked() ([]string, error) {
 	current, err := s.Current()
 	if err != nil {
 		return nil, err
@@ -232,6 +264,11 @@ func (s *Store) Prune() ([]string, error) {
 	return removed, nil
 }
 func (s *Store) Clean() ([]string, error) {
+	var removed []string
+	err := s.WithLock(context.Background(), func() error { var err error; removed, err = s.cleanUnlocked(); return err })
+	return removed, err
+}
+func (s *Store) cleanUnlocked() ([]string, error) {
 	entries, err := os.ReadDir(s.versionsDir())
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -252,6 +289,14 @@ func (s *Store) Clean() ([]string, error) {
 	return removed, nil
 }
 
+func (s *Store) WithLock(ctx context.Context, fn func() error) error {
+	release, err := s.lock(ctx)
+	if err != nil {
+		return err
+	}
+	defer release()
+	return fn()
+}
 func (s *Store) lock(ctx context.Context) (func(), error) {
 	if err := os.MkdirAll(s.Root, 0755); err != nil {
 		return nil, err
@@ -260,12 +305,16 @@ func (s *Store) lock(ctx context.Context) (func(), error) {
 	for {
 		f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 		if err == nil {
-			fmt.Fprintln(f, os.Getpid())
+			fmt.Fprintf(f, "%d\n%s\n", os.Getpid(), time.Now().UTC().Format(time.RFC3339Nano))
 			f.Close()
 			return func() { _ = os.Remove(path) }, nil
 		}
 		if !errors.Is(err, os.ErrExist) {
 			return nil, err
+		}
+		if staleLock(path) {
+			_ = os.Remove(path)
+			continue
 		}
 		select {
 		case <-ctx.Done():
@@ -273,6 +322,32 @@ func (s *Store) lock(ctx context.Context) (func(), error) {
 		case <-time.After(100 * time.Millisecond):
 		}
 	}
+}
+func staleLock(path string) bool {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	line := strings.SplitN(string(b), "\n", 2)[0]
+	pid, err := strconv.Atoi(strings.TrimSpace(line))
+	if err != nil {
+		return true
+	}
+	return !processAlive(pid)
+}
+func processAlive(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	if runtime.GOOS == "windows" {
+		out, err := exec.Command("tasklist", "/FI", fmt.Sprintf("PID eq %d", pid), "/FO", "CSV", "/NH").Output()
+		return err == nil && strings.Contains(string(out), fmt.Sprintf("\"%d\"", pid))
+	}
+	p, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	return p.Signal(os.Signal(nil)) == nil
 }
 func atomicWrite(path string, b []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
