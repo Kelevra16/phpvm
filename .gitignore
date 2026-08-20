@@ -1,4 +1,5 @@
 /phpvm.exe
+/phpvm.exe.new
 /dist/
 /.e2e-root/
 /.logs-e2e/

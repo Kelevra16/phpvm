@@ -67,6 +67,7 @@ phpvm install 8.4                install without activating
 phpvm ls [--json]                installed builds
 phpvm ls-remote [--ts] [--json] available official builds
 phpvm current [--json]           active build and metadata
+phpvm which [build]              path to the selected php.exe
 phpvm uninstall <build>
 phpvm prune                      retain only the active build
 ```
@@ -110,7 +111,7 @@ scope = "project"
 path = ".phpvm/php-error.log"
 ```
 
-Composer constraints are currently reduced to their first explicit major/minor selector. Complex constraint solving is not yet supported.
+Common Composer constraints are resolved against the available official branches, including `^8.3`, `~8.3.2`, `>=8.2 <8.5`, `8.4.*`, and `||` alternatives. Composer stability flags, hyphen ranges, and every edge case of Composer's complete solver are not yet supported.
 
 ## Configuration, profiles, and extensions
 
@@ -176,6 +177,46 @@ phpvm alias ls
 phpvm alias remove legacy
 ```
 
+## Daily maintenance
+
+Locate the active executable, inspect the registry cache, or update phpvm itself:
+
+```text
+phpvm which
+phpvm which 8.3
+phpvm cache dir
+phpvm cache clear
+phpvm self-update
+phpvm self-update v0.2.0
+```
+
+`self-update` downloads the selected GitHub Release, verifies its published SHA-256 checksum, stages the new executable, and replaces the running binary after the command exits.
+
+## PowerShell completion
+
+Generate the native argument completer:
+
+```powershell
+New-Item -ItemType Directory -Force (Split-Path $PROFILE) | Out-Null
+phpvm completion powershell | Add-Content $PROFILE
+. $PROFILE
+```
+
+Completion covers commands, subcommands, and installed builds for common version operations.
+
+## Laragon
+
+`phpvm` detects Laragon from `LARAGON_ROOT`, `C:\laragon`, or `C:\tools\laragon`:
+
+```text
+phpvm laragon detect
+phpvm laragon link
+phpvm laragon link 8.3
+phpvm laragon unlink 8.3
+```
+
+`link` creates a directory junction under Laragon's `bin\php` directory. Select the resulting `phpvm-<build>` entry from Laragon's PHP version menu and reload Laragon. Removing the junction does not remove the managed PHP build.
+
 ## Integrity and diagnostics
 
 ```text
@@ -233,4 +274,5 @@ Pass `-RemoveData` only when all managed PHP versions, profiles, logs, and confi
 - prerelease selectors and cached remote metadata
 - PowerShell, Bash, and Zsh completions
 - self-update and signed release artifacts
+- richer Laragon automation and automatic reload
 - opt-in lifecycle hooks

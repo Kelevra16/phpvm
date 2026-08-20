@@ -46,3 +46,20 @@ jobs:
         with:
           go-version: "stable"
       - run: go test -race ./...
+
+  installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse installer
+        shell: pwsh
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path install.ps1), [ref]$null, [ref]$errors) | Out-Null
+          if ($errors) { throw ($errors | Out-String) }
+      - name: Install latest public release
+        shell: pwsh
+        run: |
+          $destination = Join-Path $env:RUNNER_TEMP "phpvm-public"
+          .\install.ps1 -InstallDir $destination -NoPathUpdate
+          & (Join-Path $destination "phpvm.exe") version

@@ -9,7 +9,7 @@ func TestParseTOML(t *testing.T) {
 	}
 }
 func TestConstraintVersion(t *testing.T) {
-	for input, want := range map[string]string{"^8.3": "8.3", ">= 8.2": "8.2", "~8.4.1": "8.4"} {
+	for input, want := range map[string]string{"^8.3": "^8.3", ">= 8.2": ">= 8.2", "~8.4.1": "~8.4.1"} {
 		if got := constraintVersion(input); got != want {
 			t.Errorf("%q: got %q want %q", input, got, want)
 		}

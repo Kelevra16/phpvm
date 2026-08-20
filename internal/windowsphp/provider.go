@@ -151,7 +151,126 @@ func (p *Provider) Resolve(ctx context.Context, requested, variant, arch string)
 			return r, nil
 		}
 	}
+	if strings.ContainsAny(requested, "^~*<>=|") || strings.Contains(requested, " ") {
+		for _, r := range versions {
+			if satisfies(r.Version, requested) {
+				return r, nil
+			}
+		}
+	}
 	return Release{}, fmt.Errorf("PHP %s is not available for %s/%s", requested, runtime.GOOS, runtime.GOARCH)
+}
+
+type semver struct{ major, minor, patch int }
+
+func parseSemver(v string) semver {
+	var s semver
+	fmt.Sscanf(strings.TrimSpace(strings.TrimPrefix(v, "v")), "%d.%d.%d", &s.major, &s.minor, &s.patch)
+	return s
+}
+func cmpSemver(a, b semver) int {
+	if a.major != b.major {
+		if a.major < b.major {
+			return -1
+		}
+		return 1
+	}
+	if a.minor != b.minor {
+		if a.minor < b.minor {
+			return -1
+		}
+		return 1
+	}
+	if a.patch != b.patch {
+		if a.patch < b.patch {
+			return -1
+		}
+		return 1
+	}
+	return 0
+}
+func satisfies(version, constraint string) bool {
+	v := parseSemver(version)
+	for _, orPart := range strings.Split(constraint, "||") {
+		ok := true
+		tokens := strings.Fields(strings.ReplaceAll(orPart, ",", " "))
+		for i := 0; i < len(tokens); i++ {
+			token := tokens[i]
+			if (token == ">=" || token == "<=" || token == ">" || token == "<" || token == "=") && i+1 < len(tokens) {
+				i++
+				token += tokens[i]
+			}
+			if !satisfiesToken(v, token) {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			return true
+		}
+	}
+	return false
+}
+func satisfiesToken(v semver, token string) bool {
+	token = strings.TrimSpace(token)
+	if token == "" || token == "*" {
+		return true
+	}
+	op := "="
+	for _, candidate := range []string{">=", "<=", ">", "<", "^", "~", "="} {
+		if strings.HasPrefix(token, candidate) {
+			op = candidate
+			token = strings.TrimSpace(strings.TrimPrefix(token, candidate))
+			break
+		}
+	}
+	if strings.ContainsAny(token, "*xX") {
+		parts := strings.Split(token, ".")
+		if len(parts) > 0 && parts[0] != "*" && parts[0] != "x" && parts[0] != "X" {
+			var major int
+			fmt.Sscanf(parts[0], "%d", &major)
+			if v.major != major {
+				return false
+			}
+		}
+		if len(parts) > 1 && parts[1] != "*" && parts[1] != "x" && parts[1] != "X" {
+			var minor int
+			fmt.Sscanf(parts[1], "%d", &minor)
+			if v.minor != minor {
+				return false
+			}
+		}
+		return true
+	}
+	target := parseSemver(token)
+	c := cmpSemver(v, target)
+	switch op {
+	case ">=":
+		return c >= 0
+	case "<=":
+		return c <= 0
+	case ">":
+		return c > 0
+	case "<":
+		return c < 0
+	case "^":
+		upper := semver{major: target.major + 1}
+		if target.major == 0 {
+			upper = semver{minor: target.minor + 1}
+		}
+		return c >= 0 && cmpSemver(v, upper) < 0
+	case "~":
+		upper := semver{major: target.major + 1}
+		if strings.Count(token, ".") >= 2 {
+			upper = semver{major: target.major, minor: target.minor + 1}
+		}
+		return c >= 0 && cmpSemver(v, upper) < 0
+	default:
+		if strings.Count(token, ".") == 1 {
+			return v.major == target.major && v.minor == target.minor
+		}
+		return c == 0
+	}
 }
 
 func compare(a, b string) int {

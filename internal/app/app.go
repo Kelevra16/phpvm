@@ -80,6 +80,16 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return a.remote(ctx, args[1:])
 	case "current":
 		return a.current(s, args[1:])
+	case "which":
+		return a.which(s, args[1:])
+	case "cache":
+		return a.cache(s, args[1:])
+	case "self-update":
+		return a.selfUpdate(ctx, args[1:])
+	case "completion":
+		return a.completion(args[1:])
+	case "laragon":
+		return a.laragon(s, args[1:])
 	case "verify":
 		return a.verify(s, args[1:])
 	case "repair":
@@ -563,11 +573,14 @@ Usage:
   phpvm install [--ts] [--arch x64|x86] [--no-progress] <version>
   phpvm ls [--json]                 phpvm ls-remote [--ts] [--json]
   phpvm current [--json]            phpvm verify [build]
+  phpvm which [build]               phpvm cache <dir|clear>
+  phpvm self-update                 phpvm completion powershell
   phpvm repair [build]              phpvm doctor [--json]
   phpvm exec [version] -- <command> phpvm matrix <versions...> -- <command>
   phpvm alias [ls|set|remove]        phpvm sync
   phpvm ini <get|set>                phpvm profile <ls|create|set|use>
   phpvm ext <ls|enable|disable>       phpvm logs <path|show|tail|open|clear|doctor>
+  phpvm laragon <detect|link|unlink>
   phpvm uninstall <build>            phpvm prune | clean
 `)
 }

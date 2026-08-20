@@ -15,7 +15,7 @@ type projectConfig struct {
 	LogScope, LogPath              string
 }
 
-var phpConstraint = regexp.MustCompile(`(?:\^|~|>=?\s*)?(\d+\.\d+)(?:\.\d+)?`)
+var phpConstraint = regexp.MustCompile(`\d+\.\d+`)
 
 func findProjectConfig() (projectConfig, error) {
 	dir, err := os.Getwd()
@@ -68,9 +68,8 @@ func readProjectDir(dir string) (projectConfig, bool, error) {
 	return projectConfig{}, false, nil
 }
 func constraintVersion(v string) string {
-	m := phpConstraint.FindStringSubmatch(v)
-	if len(m) > 1 {
-		return m[1]
+	if phpConstraint.MatchString(v) {
+		return strings.TrimSpace(v)
 	}
 	return ""
 }

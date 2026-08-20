@@ -37,3 +37,15 @@ func TestRegistryCache(t *testing.T) {
 		t.Fatalf("registry called %d times", calls)
 	}
 }
+
+func TestComposerConstraints(t *testing.T) {
+	cases := []struct {
+		version, constraint string
+		want                bool
+	}{{"8.4.2", "^8.3", true}, {"9.0.0", "^8.3", false}, {"8.4.2", ">=8.2 <8.5", true}, {"8.5.0", ">=8.2 <8.5", false}, {"8.4.2", "8.4.*", true}, {"8.3.9", "~8.3.2", true}, {"8.4.0", "~8.3.2", false}}
+	for _, tc := range cases {
+		if got := satisfies(tc.version, tc.constraint); got != tc.want {
+			t.Errorf("satisfies(%s,%s)=%v want %v", tc.version, tc.constraint, got, tc.want)
+		}
+	}
+}
