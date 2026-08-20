@@ -1,10 +1,51 @@
 # phpvm
 
+[![CI](https://github.com/Kelevra16/phpvm/actions/workflows/ci.yml/badge.svg)](https://github.com/Kelevra16/phpvm/actions/workflows/ci.yml)
+[![Release](https://github.com/Kelevra16/phpvm/actions/workflows/release.yml/badge.svg)](https://github.com/Kelevra16/phpvm/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 `phpvm` is a PHP version and environment manager inspired by [gobrew](https://github.com/kevincobain2000/gobrew). It installs official PHP builds without administrator privileges and exposes a stable wrapper that does not require a shell rehash when versions change.
 
-> Platform status: the binary manager currently targets official Windows x64/x86 builds. The provider boundary is intentionally isolated for future Linux and macOS support.
+> **Release candidate:** the binary manager currently targets official Windows x64/x86 builds. Linux and macOS are not supported yet.
 
-## Build and setup
+## Install
+
+After the first GitHub release is published, install or update the latest version from PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/Kelevra16/phpvm/main/install.ps1 | iex
+```
+
+Install a specific release:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Kelevra16/phpvm/main/install.ps1))) -Version v0.1.0
+```
+
+The installer:
+
+- selects the correct Windows x64/x86 artifact;
+- verifies it against the release SHA-256 manifest;
+- installs `phpvm.exe` under `%LOCALAPPDATA%\phpvm\bin`;
+- adds both `phpvm` and its managed PHP wrapper directory to the user `PATH`.
+
+Open a new terminal if necessary, then run:
+
+```powershell
+phpvm use 8.4
+php --version
+phpvm doctor
+```
+
+To choose another destination or leave `PATH` unchanged, download the installer and run:
+
+```powershell
+.\install.ps1 -InstallDir C:\Tools\phpvm -NoPathUpdate
+```
+
+If no release exists yet, build from source as described below.
+
+## Build from source
 
 ```powershell
 go test ./...
@@ -159,15 +200,9 @@ The official release registry is cached for six hours. Set `PHPVM_CACHE_TTL` to 
 
 Exit codes are stable: `0` success, `1` operational failure, `2` invalid usage, and `124` timeout. Child commands executed through `phpvm exec` retain their own non-zero exit code.
 
-## Install a release
+## Uninstall
 
-Once releases are published to GitHub:
-
-```powershell
-irm https://raw.githubusercontent.com/Kelevra16/phpvm/main/install.ps1 | iex
-```
-
-The installer selects x64/x86 automatically and verifies the archive against the release SHA-256 manifest. To uninstall the executable while retaining installed PHP versions:
+Run the repository's uninstall script to remove the executable while retaining installed PHP versions:
 
 ```powershell
 .\uninstall.ps1
@@ -197,5 +232,5 @@ Pass `-RemoveData` only when all managed PHP versions, profiles, logs, and confi
 - external PECL extension installation and dependency resolution
 - prerelease selectors and cached remote metadata
 - PowerShell, Bash, and Zsh completions
-- self-update, signed release artifacts, and CI release automation
+- self-update and signed release artifacts
 - opt-in lifecycle hooks
