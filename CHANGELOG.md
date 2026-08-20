@@ -13,6 +13,10 @@
 - Public installer validation in CI.
 - Issue templates, contribution guidance, and a security policy.
 
+### Fixed
+
+- The installer now puts its canonical binary directory before the managed PHP wrapper directory and preserves a legacy `~/.phpvm/bin/phpvm.exe` as `phpvm.exe.legacy`, preventing old development binaries from shadowing a release.
+
 ## [0.1.0] - 2026-08-20
 
 - First Windows release with version installation, TS/NTS and x64/x86 builds, project configuration, profiles, extensions, logs, diagnostics, integrity verification, aliases, execution matrices, and transactional storage.

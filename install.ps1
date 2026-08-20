@@ -28,20 +28,23 @@ function Get-PhpvmRelease {
     }
 }
 
-function Add-UserPathEntry {
-    param([string]$Entry)
+function Set-PhpvmPathOrder {
+    param([string[]]$PreferredEntries)
 
-    $fullEntry = [IO.Path]::GetFullPath($Entry).TrimEnd("\")
-    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-    $entries = @($userPath -split ";" | Where-Object { $_ })
-    $exists = $entries | Where-Object {
-        try { [IO.Path]::GetFullPath($_).TrimEnd("\") -ieq $fullEntry } catch { $_ -ieq $Entry }
+    $preferred = @($PreferredEntries | ForEach-Object { [IO.Path]::GetFullPath($_).TrimEnd("\") })
+    $userEntries = @([Environment]::GetEnvironmentVariable("Path", "User") -split ";" | Where-Object { $_ })
+    $processEntries = @($env:Path -split ";" | Where-Object { $_ })
+
+    foreach ($entry in $preferred) {
+        $userEntries = @($userEntries | Where-Object {
+            try { [IO.Path]::GetFullPath($_).TrimEnd("\") -ine $entry } catch { $_ -ine $entry }
+        })
+        $processEntries = @($processEntries | Where-Object {
+            try { [IO.Path]::GetFullPath($_).TrimEnd("\") -ine $entry } catch { $_ -ine $entry }
+        })
     }
-    if (-not $exists) {
-        $entries += $fullEntry
-        [Environment]::SetEnvironmentVariable("Path", ($entries -join ";"), "User")
-    }
-    if (($env:Path -split ";") -notcontains $fullEntry) { $env:Path = "$fullEntry;$env:Path" }
+    [Environment]::SetEnvironmentVariable("Path", (($preferred + $userEntries) -join ";"), "User")
+    $env:Path = (($preferred + $processEntries) -join ";")
 }
 
 $architecture = if ([Environment]::Is64BitOperatingSystem) { "amd64" } else { "386" }
@@ -84,9 +87,15 @@ try {
 }
 
 $phpvmRoot = if ($env:PHPVM_ROOT) { $env:PHPVM_ROOT } else { Join-Path $HOME ".phpvm" }
+$legacyExecutable = Join-Path $phpvmRoot "bin\phpvm.exe"
+$destination = [IO.Path]::GetFullPath((Join-Path $InstallDir "phpvm.exe"))
+if ((Test-Path -LiteralPath $legacyExecutable -PathType Leaf) -and ([IO.Path]::GetFullPath($legacyExecutable) -ine $destination)) {
+    $legacyBackup = "$legacyExecutable.legacy"
+    Move-Item -LiteralPath $legacyExecutable -Destination $legacyBackup -Force
+    Write-Warning "Moved legacy executable to '$legacyBackup' so it cannot shadow the installed release."
+}
 if (-not $NoPathUpdate) {
-    Add-UserPathEntry -Entry $InstallDir
-    Add-UserPathEntry -Entry (Join-Path $phpvmRoot "bin")
+    Set-PhpvmPathOrder -PreferredEntries @($InstallDir, (Join-Path $phpvmRoot "bin"))
 }
 
 Write-Host "Installed phpvm $tag to $InstallDir" -ForegroundColor Green

@@ -251,6 +251,17 @@ Run the repository's uninstall script to remove the executable while retaining i
 
 Pass `-RemoveData` only when all managed PHP versions, profiles, logs, and configuration should also be removed.
 
+## Troubleshooting installation
+
+If `phpvm version` shows `dev` after installing a release, inspect every matching executable:
+
+```powershell
+Get-Command phpvm -All
+where.exe phpvm
+```
+
+The canonical release location is `%LOCALAPPDATA%\phpvm\bin\phpvm.exe`. Current installers move an older `~\.phpvm\bin\phpvm.exe` to `phpvm.exe.legacy` and put the canonical directory first in `PATH`. Open a new terminal after installation so PowerShell reads the updated user environment.
+
 ## Storage layout
 
 ```text
