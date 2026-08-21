@@ -3,6 +3,7 @@ package windowsphp
 import (
 	"bytes"
 	"context"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -145,8 +146,18 @@ func (p *Provider) allVersions(ctx context.Context, variant, targetArch string) 
 
 var archiveZipPattern = regexp.MustCompile(`(?i)href="(php-(\d+\.\d+\.\d+)(-nts)?-Win32-(?:VC|VS)\d+-(x86|x64)\.zip)"`)
 
+//go:embed historical_checksums.json
+var historicalChecksumJSON []byte
+
+func historicalChecksums() map[string]string {
+	m := map[string]string{}
+	_ = json.Unmarshal(historicalChecksumJSON, &m)
+	return m
+}
+
 func parseArchiveIndex(payload []byte, base, variant, targetArch string) []Release {
 	var out []Release
+	checksums := historicalChecksums()
 	for _, m := range archiveZipPattern.FindAllSubmatch(payload, -1) {
 		v := "ts"
 		if len(m[3]) > 0 {
@@ -156,7 +167,8 @@ func parseArchiveIndex(payload []byte, base, variant, targetArch string) []Relea
 		if v != variant || arch != targetArch {
 			continue
 		}
-		out = append(out, Release{Version: string(m[2]), Variant: v, Arch: arch, URL: strings.TrimRight(base, "/") + "/" + string(m[1]), Archived: true})
+		filename := string(m[1])
+		out = append(out, Release{Version: string(m[2]), Variant: v, Arch: arch, URL: strings.TrimRight(base, "/") + "/" + filename, SHA256: checksums[filename], Archived: true})
 	}
 	return out
 }
@@ -212,6 +224,23 @@ func (p *Provider) Resolve(ctx context.Context, requested, variant, arch string)
 		}
 		return versions[0], nil
 	}
+	if strings.HasPrefix(requested, "latest-") {
+		requested = strings.TrimPrefix(requested, "latest-")
+	}
+	if requested == "supported" {
+		for _, r := range versions {
+			if !IsEOL(r.Version, time.Now()) {
+				return r, nil
+			}
+		}
+	}
+	if requested == "legacy" {
+		for _, r := range versions {
+			if IsEOL(r.Version, time.Now()) {
+				return r, nil
+			}
+		}
+	}
 	for _, r := range versions {
 		if r.Version == requested {
 			return r, nil
@@ -231,6 +260,37 @@ func (p *Provider) Resolve(ctx context.Context, requested, variant, arch string)
 		}
 	}
 	return Release{}, fmt.Errorf("PHP %s is not available for %s/%s", requested, runtime.GOOS, runtime.GOARCH)
+}
+
+// IsEOL reports lifecycle status using PHP's published branch schedule.
+func IsEOL(version string, now time.Time) bool {
+	s := parseSemver(version)
+	ends := map[string]string{"5.2": "2011-01-06", "5.3": "2014-08-14", "5.4": "2015-09-03", "5.5": "2016-07-21", "5.6": "2018-12-31", "7.0": "2019-01-10", "7.1": "2019-12-01", "7.2": "2020-11-30", "7.3": "2021-12-06", "7.4": "2022-11-28", "8.0": "2023-11-26", "8.1": "2025-12-31", "8.2": "2026-12-31", "8.3": "2027-12-31", "8.4": "2028-12-31", "8.5": "2029-12-31"}
+	d, ok := ends[fmt.Sprintf("%d.%d", s.major, s.minor)]
+	if !ok {
+		return false
+	}
+	t, _ := time.Parse("2006-01-02", d)
+	return now.After(t)
+}
+
+// CompilerRuntime describes the Windows toolchain required by a PHP build.
+func CompilerRuntime(version string) string {
+	s := parseSemver(version)
+	switch {
+	case s.major == 5 && s.minor <= 2:
+		return "VC6"
+	case s.major == 5 && s.minor <= 4:
+		return "VC9"
+	case s.major == 5 && s.minor <= 6:
+		return "VC11"
+	case s.major == 7 && s.minor <= 1:
+		return "VC14"
+	case s.major == 7 || (s.major == 8 && s.minor <= 0):
+		return "VS16"
+	default:
+		return "VS17"
+	}
 }
 
 type semver struct{ major, minor, patch int }

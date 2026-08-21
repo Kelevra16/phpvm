@@ -332,6 +332,39 @@ The canonical release location is `%LOCALAPPDATA%\phpvm\bin\phpvm.exe`. Current 
       phpvm.json
 ```
 
+## Advanced environment tools
+
+```text
+phpvm info 5.6 --json       availability, EOL status, architecture, and compiler runtime
+phpvm supported             branches still receiving PHP security support
+phpvm use latest-8.3        newest patch in one branch
+phpvm use supported         newest supported release
+phpvm use legacy            newest EOL release
+phpvm lock                  capture PHP, INI, and enabled extensions in phpvm.lock
+phpvm restore               reproduce phpvm.lock
+```
+
+EOL selections display a warning. `doctor` executes PHP and reports its expected Windows compiler runtime (VC6 through VS17), helping diagnose missing runtime DLLs. The historical checksum manifest is maintained in the repository; entries verified by phpvm no longer need the unverified-archive opt-in, while packages without a manifest entry still do.
+
+External extension and Composer workflows:
+
+```text
+phpvm ext search redis
+phpvm ext install https://example.test/php_redis-compatible-build.zip
+phpvm ext update
+phpvm composer install
+phpvm composer --version
+```
+
+External extension sources are recorded and refreshed from the same URL. Packages must already match PHP version, TS/NTS, architecture, and compiler runtime; phpvm does not guess binary compatibility or PECL dependencies. Composer is downloaded from its official stable channel and verified with its published SHA-256.
+
+Existing PHP directories can be copied into managed storage without changing their source:
+
+```text
+phpvm import C:\laragon\bin\php\php-8.3.0
+phpvm import C:\tools\custom-php --name 8.3.0-custom --ts --arch x64
+```
+
 ## Remaining roadmap
 
 - Linux and macOS providers

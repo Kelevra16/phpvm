@@ -28,6 +28,74 @@ type Metadata struct {
 	ArchiveSHA256    string    `json:"archiveSha256"`
 	ExecutableSHA256 string    `json:"executableSha256"`
 	InstalledAt      time.Time `json:"installedAt"`
+	Imported         bool      `json:"imported,omitempty"`
+	ValidationError  string    `json:"validationError,omitempty"`
+	ValidatedAt      time.Time `json:"validatedAt,omitempty"`
+	Runtime          string    `json:"runtime,omitempty"`
+	SourceKind       string    `json:"sourceKind,omitempty"`
+}
+
+// Import copies an existing PHP distribution into managed storage.
+func (s *Store) Import(source string, m Metadata) error {
+	return s.WithLock(context.Background(), func() error {
+		if s.IsInstalled(m.ID()) {
+			return fmt.Errorf("PHP build %s is already installed", m.ID())
+		}
+		if err := os.MkdirAll(s.versionsDir(), 0755); err != nil {
+			return err
+		}
+		stage, err := os.MkdirTemp(s.versionsDir(), ".import-")
+		if err != nil {
+			return err
+		}
+		defer os.RemoveAll(stage)
+		if err := copyTree(source, stage); err != nil {
+			return err
+		}
+		php := filepath.Join(stage, "php.exe")
+		m.ExecutableSHA256, err = fileHash(php)
+		if err != nil {
+			return fmt.Errorf("source does not contain php.exe: %w", err)
+		}
+		m.Imported = true
+		m.InstalledAt = time.Now().UTC()
+		b, _ := json.MarshalIndent(m, "", "  ")
+		if err := os.WriteFile(filepath.Join(stage, "phpvm.json"), append(b, '\n'), 0644); err != nil {
+			return err
+		}
+		return renameWithRetry(stage, s.installation(m.ID()))
+	})
+}
+
+func copyTree(source, destination string) error {
+	return filepath.Walk(source, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(source, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(destination, rel)
+		if info.IsDir() {
+			return os.MkdirAll(target, info.Mode())
+		}
+		in, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer in.Close()
+		out, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, info.Mode())
+		if err != nil {
+			return err
+		}
+		_, cpErr := io.Copy(out, in)
+		closeErr := out.Close()
+		if cpErr != nil {
+			return cpErr
+		}
+		return closeErr
+	})
 }
 
 func (m Metadata) ID() string { return m.Version + "-" + m.Variant + "-" + m.Arch }
@@ -35,9 +103,10 @@ func (m Metadata) ID() string { return m.Version + "-" + m.Variant + "-" + m.Arc
 type Store struct {
 	Root     string
 	Progress func(downloaded, total int64)
+	Validate func(context.Context, string) error
 }
 
-func New(root string) *Store                   { return &Store{Root: root} }
+func New(root string) *Store                   { return &Store{Root: root, Validate: validatePHP} }
 func (s *Store) versionsDir() string           { return filepath.Join(s.Root, "versions") }
 func (s *Store) currentFile() string           { return filepath.Join(s.Root, "current") }
 func (s *Store) installation(id string) string { return filepath.Join(s.versionsDir(), id) }
@@ -180,6 +249,12 @@ func (s *Store) installUnlocked(ctx context.Context, m Metadata) error {
 	if err != nil {
 		return err
 	}
+	if s.Validate != nil {
+		if err := s.Validate(ctx, php); err != nil {
+			return fmt.Errorf("validate staged PHP: %w", err)
+		}
+		m.ValidatedAt = time.Now().UTC()
+	}
 	m.InstalledAt = time.Now().UTC()
 	b, _ := json.MarshalIndent(m, "", "  ")
 	if err := os.WriteFile(filepath.Join(stage, "phpvm.json"), append(b, '\n'), 0644); err != nil {
@@ -187,6 +262,21 @@ func (s *Store) installUnlocked(ctx context.Context, m Metadata) error {
 	}
 	if err := renameWithRetry(stage, s.installation(m.ID())); err != nil {
 		return fmt.Errorf("publish installation: %w", err)
+	}
+	return nil
+}
+
+func validatePHP(ctx context.Context, php string) error {
+	for _, args := range [][]string{{"--version"}, {"--ini"}, {"-m"}} {
+		cmd := exec.CommandContext(ctx, php, args...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			detail := strings.TrimSpace(string(out))
+			if detail == "" {
+				detail = err.Error()
+			}
+			return fmt.Errorf("php %s failed: %s", strings.Join(args, " "), detail)
+		}
 	}
 	return nil
 }

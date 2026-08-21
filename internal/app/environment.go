@@ -2,10 +2,12 @@ package app
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -252,7 +254,80 @@ func (a *App) extensions(s *store.Store, args []string) error {
 		fmt.Fprintln(a.Out, args[0]+"d", name)
 		return nil
 	}
-	return fmt.Errorf("usage: phpvm ext ls|enable <name>|disable <name>")
+	if len(args) == 2 && args[0] == "install" {
+		return a.installExtensionPackage(dir, path, args[1], true)
+	}
+	if len(args) == 2 && args[0] == "search" {
+		payload, err := download(context.Background(), "https://pecl.php.net/rest/p/packages.xml")
+		if err != nil {
+			return err
+		}
+		re := regexp.MustCompile(`(?i)<p>([^<]+)</p>`)
+		needle := strings.ToLower(args[1])
+		found := false
+		for _, m := range re.FindAllSubmatch(payload, -1) {
+			name := string(m[1])
+			if strings.Contains(strings.ToLower(name), needle) {
+				fmt.Fprintln(a.Out, name)
+				found = true
+			}
+		}
+		if !found {
+			return fmt.Errorf("no PECL packages match %s", args[1])
+		}
+		return nil
+	}
+	if len(args) == 1 && args[0] == "update" {
+		sources := map[string]string{}
+		b, err := os.ReadFile(filepath.Join(dir, "phpvm-extensions.json"))
+		if err != nil {
+			return fmt.Errorf("no externally installed extensions to update")
+		}
+		if err = json.Unmarshal(b, &sources); err != nil {
+			return err
+		}
+		urls := map[string]bool{}
+		for _, url := range sources {
+			urls[url] = true
+		}
+		for url := range urls {
+			if err = a.installExtensionPackage(dir, path, url, false); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return fmt.Errorf("usage: phpvm ext ls|enable <name>|disable <name>|search <term>|install <https-zip>|update")
+}
+
+func (a *App) installExtensionPackage(dir, iniPath, url string, announce bool) error {
+	if !strings.HasPrefix(url, "https://") {
+		return fmt.Errorf("extension packages must use an HTTPS URL")
+	}
+	payload, err := download(context.Background(), url)
+	if err != nil {
+		return err
+	}
+	files, err := extractExtensionZIP(payload, filepath.Join(dir, "ext"))
+	if err != nil {
+		return err
+	}
+	sources := map[string]string{}
+	manifest := filepath.Join(dir, "phpvm-extensions.json")
+	if b, e := os.ReadFile(manifest); e == nil {
+		_ = json.Unmarshal(b, &sources)
+	}
+	for _, dll := range files {
+		name := strings.TrimSuffix(strings.TrimPrefix(dll, "php_"), ".dll")
+		_ = toggleExtension(iniPath, name, true)
+		sources[name] = url
+		if announce {
+			fmt.Fprintln(a.Out, "Installed and enabled", name)
+		} else {
+			fmt.Fprintln(a.Out, "Updated", name)
+		}
+	}
+	return writeJSON(manifest, sources)
 }
 func enabledExtensions(path string) (map[string]bool, error) {
 	out := map[string]bool{}

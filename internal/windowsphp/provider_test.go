@@ -45,8 +45,26 @@ func TestParseArchiveIndex(t *testing.T) {
 <a href="php-5.4.45-nts-Win32-VC9-x86.zip">x86</a>
 <a href="php-debug-pack-5.6.40-nts-Win32-VC11-x64.zip">debug</a>`)
 	r := parseArchiveIndex(html, archivesURL, "nts", "x64")
-	if len(r) != 1 || r[0].Version != "5.6.40" || !r[0].Archived || r[0].SHA256 != "" {
+	if len(r) != 1 || r[0].Version != "5.6.40" || !r[0].Archived {
 		t.Fatalf("unexpected archive releases: %#v", r)
+	}
+}
+
+func TestHistoricalChecksumManifest(t *testing.T) {
+	html := []byte(`<a href="php-5.6.40-nts-Win32-VC11-x64.zip">nts</a>`)
+	r := parseArchiveIndex(html, archivesURL, "nts", "x64")
+	if len(r) != 1 || r[0].SHA256 != "3d7668280fa4b16f70705539ba1e4ea17eef344c81e82881cbeca26fb7f181f1" {
+		t.Fatalf("checksum not loaded: %#v", r)
+	}
+}
+
+func TestLifecycleAndCompilerRuntime(t *testing.T) {
+	now := time.Date(2026, 8, 20, 0, 0, 0, 0, time.UTC)
+	if !IsEOL("5.6.40", now) || IsEOL("8.4.1", now) {
+		t.Fatal("unexpected lifecycle status")
+	}
+	if CompilerRuntime("5.6.40") != "VC11" || CompilerRuntime("8.4.1") != "VS17" {
+		t.Fatal("unexpected compiler runtime")
 	}
 }
 

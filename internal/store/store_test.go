@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -28,12 +29,29 @@ func testArchive(t *testing.T) []byte {
 	}
 	return b.Bytes()
 }
+
+func TestFailedValidationIsNotPublished(t *testing.T) {
+	archive := testArchive(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write(archive) }))
+	defer server.Close()
+	h := sha256.Sum256(archive)
+	s := New(t.TempDir())
+	s.Validate = func(context.Context, string) error { return errors.New("missing runtime") }
+	m := Metadata{Version: "5.6.40", Variant: "nts", Arch: "x64", URL: server.URL, ArchiveSHA256: hex.EncodeToString(h[:])}
+	if err := s.Install(context.Background(), m); err == nil {
+		t.Fatal("expected validation failure")
+	}
+	if s.IsInstalled(m.ID()) {
+		t.Fatal("failed build was published")
+	}
+}
 func TestTransactionalInstallAndVerify(t *testing.T) {
 	archive := testArchive(t)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write(archive) }))
 	defer server.Close()
 	h := sha256.Sum256(archive)
 	s := New(t.TempDir())
+	s.Validate = func(context.Context, string) error { return nil }
 	m := Metadata{Version: "8.4.1", Variant: "nts", Arch: "x64", URL: server.URL, ArchiveSHA256: hex.EncodeToString(h[:])}
 	if err := s.Install(context.Background(), m); err != nil {
 		t.Fatal(err)

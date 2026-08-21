@@ -332,6 +332,39 @@ La ubicación canónica es `%LOCALAPPDATA%\phpvm\bin\phpvm.exe`. Los instaladore
       phpvm.json
 ```
 
+## Herramientas avanzadas de entorno
+
+```text
+phpvm info 5.6 --json       disponibilidad, EOL, arquitectura y runtime del compilador
+phpvm supported             ramas que todavía reciben soporte de seguridad
+phpvm use latest-8.3        parche más nuevo de una rama
+phpvm use supported         release soportada más reciente
+phpvm use legacy            release EOL más reciente
+phpvm lock                  captura PHP, INI y extensiones en phpvm.lock
+phpvm restore               reproduce phpvm.lock
+```
+
+Las selecciones EOL muestran una advertencia. `doctor` ejecuta PHP e informa su runtime esperado de Windows (VC6 a VS17), ayudando a diagnosticar DLL faltantes. El manifiesto histórico de checksums vive en el repositorio; las entradas verificadas por phpvm ya no necesitan aceptar un archivo no verificado, mientras que los paquetes sin entrada todavía lo exigen.
+
+Flujos para extensiones externas y Composer:
+
+```text
+phpvm ext search redis
+phpvm ext install https://example.test/php_redis-build-compatible.zip
+phpvm ext update
+phpvm composer install
+phpvm composer --version
+```
+
+Las fuentes de extensiones externas se registran y actualizan desde la misma URL. Los paquetes deben coincidir con versión PHP, TS/NTS, arquitectura y compilador; phpvm no adivina la compatibilidad binaria ni dependencias PECL. Composer se descarga desde su canal estable oficial y se verifica con su SHA-256 publicado.
+
+Las instalaciones PHP existentes pueden copiarse al almacenamiento administrado sin modificar su origen:
+
+```text
+phpvm import C:\laragon\bin\php\php-8.3.0
+phpvm import C:\tools\custom-php --name 8.3.0-custom --ts --arch x64
+```
+
 ## Roadmap pendiente
 
 - proveedores para Linux y macOS;

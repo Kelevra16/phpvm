@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/Kelevra16/phpvm/internal/store"
 	"github.com/Kelevra16/phpvm/internal/windowsphp"
@@ -24,8 +25,8 @@ type App struct {
 func New(version string) *App { return &App{Version: version, Out: os.Stdout, Err: os.Stderr} }
 
 type buildOptions struct {
-	variant, arch                                        string
-	json, quiet, noProgress, all, allowUnverifiedArchive bool
+	variant, arch                                                       string
+	json, quiet, noProgress, all, supportedOnly, allowUnverifiedArchive bool
 }
 
 func defaultOptions() buildOptions {
@@ -44,6 +45,7 @@ func parseBuildFlags(name string, args []string) (buildOptions, []string, error)
 	fs.BoolVar(&o.quiet, "quiet", false, "")
 	fs.BoolVar(&o.noProgress, "no-progress", false, "")
 	fs.BoolVar(&o.all, "all", false, "")
+	fs.BoolVar(&o.supportedOnly, "supported-only", false, "")
 	fs.BoolVar(&o.allowUnverifiedArchive, "allow-unverified-archive", false, "")
 	fs.StringVar(&o.arch, "arch", o.arch, "")
 	if err := fs.Parse(args); err != nil {
@@ -80,6 +82,12 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return a.list(s, args[1:])
 	case "ls-remote":
 		return a.remote(ctx, args[1:])
+	case "info":
+		return a.info(ctx, s, args[1:])
+	case "supported":
+		return a.supported(ctx, s, args[1:])
+	case "runtime":
+		return a.runtimeInfo(args[1:])
 	case "current":
 		return a.current(s, args[1:])
 	case "which":
@@ -125,6 +133,14 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return a.logs(ctx, s, args[1:])
 	case "sync":
 		return a.sync(ctx, s)
+	case "lock":
+		return a.lockProject(s, args[1:])
+	case "restore":
+		return a.restoreProject(ctx, s, args[1:])
+	case "composer":
+		return a.composer(ctx, s, args[1:])
+	case "import":
+		return a.importBuild(s, args[1:])
 	case "matrix":
 		return a.matrix(ctx, s, args[1:])
 	case "uninstall", "remove", "rm":
@@ -201,6 +217,13 @@ func (a *App) install(ctx context.Context, s *store.Store, requested string, o b
 			o.arch = cfg.Arch
 		}
 	}
+	// Imported and custom builds may not exist in the official registry.
+	if s.IsInstalled(requested) {
+		if !o.quiet {
+			fmt.Fprintln(a.Out, "PHP", requested, "is already installed")
+		}
+		return requested, nil
+	}
 	p, err := provider(s.Root)
 	if err != nil {
 		return "", err
@@ -212,7 +235,10 @@ func (a *App) install(ctx context.Context, s *store.Store, requested string, o b
 	if rel.Archived && rel.SHA256 == "" && !o.allowUnverifiedArchive {
 		return "", fmt.Errorf("PHP %s is in the official EOL archive, which does not publish SHA-256 checksums; review the risk and retry with --allow-unverified-archive", rel.Version)
 	}
-	m := store.Metadata{Version: rel.Version, Variant: rel.Variant, Arch: rel.Arch, URL: rel.URL, ArchiveSHA256: rel.SHA256}
+	if windowsphp.IsEOL(rel.Version, time.Now()) && !o.quiet {
+		fmt.Fprintln(a.Err, "Warning: PHP", rel.Version, "is end-of-life and no longer receives security fixes.")
+	}
+	m := store.Metadata{Version: rel.Version, Variant: rel.Variant, Arch: rel.Arch, URL: rel.URL, ArchiveSHA256: rel.SHA256, Runtime: windowsphp.CompilerRuntime(rel.Version), SourceKind: "official"}
 	if s.IsInstalled(m.ID()) {
 		if !o.quiet {
 			fmt.Fprintln(a.Out, "PHP", m.ID(), "is already installed")
@@ -312,6 +338,15 @@ func (a *App) remote(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	if o.supportedOnly {
+		filtered := v[:0]
+		for _, r := range v {
+			if !windowsphp.IsEOL(r.Version, time.Now()) {
+				filtered = append(filtered, r)
+			}
+		}
+		v = filtered
+	}
 	if o.json {
 		return json.NewEncoder(a.Out).Encode(v)
 	}
@@ -401,6 +436,18 @@ func (a *App) doctor(s *store.Store, args []string) error {
 	if err == nil {
 		e := s.Verify(id)
 		checks = append(checks, check{"active executable", e == nil, first(e, "checksum valid")})
+		if m, metaErr := s.Metadata(id); metaErr == nil {
+			runtimeName := windowsphp.CompilerRuntime(m.Version)
+			out, runtimeErr := exec.Command(s.Executable(id), "--version").CombinedOutput()
+			detail := "runtime available"
+			if runtimeErr != nil {
+				detail = strings.TrimSpace(string(out))
+				if detail == "" {
+					detail = runtimeErr.Error()
+				}
+			}
+			checks = append(checks, check{"Visual C++ " + runtimeName, runtimeErr == nil, detail})
+		}
 	}
 	_, e := os.Stat(filepath.Join(s.Root, "bin", "php.cmd"))
 	checks = append(checks, check{"PATH wrapper", e == nil, first(e, filepath.Join(s.Root, "bin", "php.cmd"))})
@@ -585,6 +632,7 @@ func (a *App) help() {
 Usage:
   phpvm use [--ts] [--arch x64|x86] [--allow-unverified-archive] <version>
   phpvm install [--ts] [--arch x64|x86] [--allow-unverified-archive] <version>
+  phpvm info [--json] <version>     phpvm supported [--json]
   phpvm ls [--json]                 phpvm ls-remote [--ts] [--all] [--json]
   phpvm current [--json]            phpvm verify [build]
   phpvm which [build]               phpvm cache <dir|clear>
@@ -593,8 +641,10 @@ Usage:
   phpvm repair [build]              phpvm doctor [--json]
   phpvm exec [version] -- <command> phpvm matrix <versions...> -- <command>
   phpvm alias [ls|set|remove]        phpvm sync
+	phpvm lock | restore               phpvm composer [install|args...]
+	phpvm import <directory>            phpvm ext <ls|enable|disable|search|install|update>
   phpvm ini <get|set>                phpvm profile <ls|create|set|use>
-  phpvm ext <ls|enable|disable>       phpvm logs <path|show|tail|open|clear|doctor>
+  phpvm logs <path|show|tail|open|clear|doctor>
   phpvm laragon <detect|link|unlink>
   phpvm uninstall <build>            phpvm prune | clean
 `)

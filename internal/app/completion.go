@@ -6,7 +6,7 @@ import (
 
 const powershellCompletion = `Register-ArgumentCompleter -Native -CommandName phpvm -ScriptBlock {
     param($wordToComplete, $commandAst, $cursorPosition)
-    $commands = @('use','install','ls','list','ls-remote','current','which','resolve','shell','uninstall','prune','verify','repair','doctor','clean','exec','matrix','alias','sync','ini','profile','ext','logs','cache','self-update','completion','laragon','version','help')
+    $commands = @('use','install','info','supported','ls','list','ls-remote','current','which','resolve','shell','uninstall','prune','verify','repair','doctor','clean','exec','matrix','alias','sync','lock','restore','composer','import','ini','profile','ext','logs','cache','self-update','completion','laragon','version','help')
     $parts = @($commandAst.CommandElements | ForEach-Object { $_.Extent.Text })
     if ($parts.Count -le 2) {
         $commands | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object {
@@ -17,7 +17,7 @@ const powershellCompletion = `Register-ArgumentCompleter -Native -CommandName ph
     $subcommands = @{
         logs=@('path','show','tail','open','clear','doctor'); cache=@('dir','clear')
         ini=@('path','show','diff','reset','get','set'); profile=@('ls','create','set','use')
-        ext=@('ls','enable','disable'); alias=@('ls','set','remove')
+        ext=@('ls','enable','disable','search','install','update'); composer=@('install','self-update'); alias=@('ls','set','remove')
         laragon=@('detect','link','unlink'); completion=@('powershell')
     }
     $command = $parts[1]

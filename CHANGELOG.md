@@ -4,6 +4,13 @@
 
 ### Added
 
+- Historical Windows PHP catalog back to 5.2, compact/all listings, EOL warnings, lifecycle channels, and build information.
+- Versioned historical checksum manifest plus explicit opt-in for archive packages without a maintained hash.
+- Post-install executable/runtime validation and Visual C++ diagnostics.
+- Reproducible `phpvm lock` and `phpvm restore` environments.
+- External PECL package search, HTTPS ZIP installation, and source-based updates.
+- Verified managed Composer installation and execution.
+- Safe copying and registration of existing PHP installations with `phpvm import`.
 - `phpvm self-update` with GitHub Release checksum verification and deferred executable replacement.
 - `phpvm which [build]`.
 - `phpvm cache dir|clear`.
