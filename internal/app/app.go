@@ -24,8 +24,8 @@ type App struct {
 func New(version string) *App { return &App{Version: version, Out: os.Stdout, Err: os.Stderr} }
 
 type buildOptions struct {
-	variant, arch           string
-	json, quiet, noProgress bool
+	variant, arch                                        string
+	json, quiet, noProgress, all, allowUnverifiedArchive bool
 }
 
 func defaultOptions() buildOptions {
@@ -43,6 +43,8 @@ func parseBuildFlags(name string, args []string) (buildOptions, []string, error)
 	fs.BoolVar(&o.json, "json", false, "")
 	fs.BoolVar(&o.quiet, "quiet", false, "")
 	fs.BoolVar(&o.noProgress, "no-progress", false, "")
+	fs.BoolVar(&o.all, "all", false, "")
+	fs.BoolVar(&o.allowUnverifiedArchive, "allow-unverified-archive", false, "")
 	fs.StringVar(&o.arch, "arch", o.arch, "")
 	if err := fs.Parse(args); err != nil {
 		return o, nil, err
@@ -158,7 +160,7 @@ func (a *App) installCommand(ctx context.Context, s *store.Store, command string
 		return err
 	}
 	if len(rest) != 1 {
-		return fmt.Errorf("usage: phpvm %s [--ts] [--arch x64|x86] <version>", command)
+		return fmt.Errorf("usage: phpvm %s [--ts] [--arch x64|x86] [--allow-unverified-archive] <version>", command)
 	}
 	id, err := a.install(ctx, s, rest[0], o)
 	if err != nil {
@@ -206,6 +208,9 @@ func (a *App) install(ctx context.Context, s *store.Store, requested string, o b
 	rel, err := p.Resolve(ctx, requested, o.variant, o.arch)
 	if err != nil {
 		return "", err
+	}
+	if rel.Archived && rel.SHA256 == "" && !o.allowUnverifiedArchive {
+		return "", fmt.Errorf("PHP %s is in the official EOL archive, which does not publish SHA-256 checksums; review the risk and retry with --allow-unverified-archive", rel.Version)
 	}
 	m := store.Metadata{Version: rel.Version, Variant: rel.Variant, Arch: rel.Arch, URL: rel.URL, ArchiveSHA256: rel.SHA256}
 	if s.IsInstalled(m.ID()) {
@@ -291,14 +296,19 @@ func (a *App) remote(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
-		return fmt.Errorf("usage: phpvm ls-remote [--ts] [--arch x64|x86] [--json]")
+		return fmt.Errorf("usage: phpvm ls-remote [--ts] [--arch x64|x86] [--all] [--json]")
 	}
 	root, _ := rootDir()
 	p, err := provider(root)
 	if err != nil {
 		return err
 	}
-	v, err := p.Versions(ctx, o.variant, o.arch)
+	var v []windowsphp.Release
+	if o.all {
+		v, err = p.AllVersions(ctx, o.variant, o.arch)
+	} else {
+		v, err = p.Versions(ctx, o.variant, o.arch)
+	}
 	if err != nil {
 		return err
 	}
@@ -573,9 +583,9 @@ func (a *App) help() {
 	fmt.Fprint(a.Out, `phpvm - PHP version and environment manager
 
 Usage:
-  phpvm use [--ts] [--arch x64|x86] [--no-progress] <version>
-  phpvm install [--ts] [--arch x64|x86] [--no-progress] <version>
-  phpvm ls [--json]                 phpvm ls-remote [--ts] [--json]
+  phpvm use [--ts] [--arch x64|x86] [--allow-unverified-archive] <version>
+  phpvm install [--ts] [--arch x64|x86] [--allow-unverified-archive] <version>
+  phpvm ls [--json]                 phpvm ls-remote [--ts] [--all] [--json]
   phpvm current [--json]            phpvm verify [build]
   phpvm which [build]               phpvm cache <dir|clear>
   phpvm resolve [--path] [version]  phpvm shell [version|--current]

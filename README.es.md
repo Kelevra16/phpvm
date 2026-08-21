@@ -67,7 +67,8 @@ phpvm use --ts 8.4                distribución thread-safe
 phpvm use --arch x86 8.3          distribución de 32 bits
 phpvm install 8.4                 instala sin activar
 phpvm ls [--json]                 distribuciones instaladas
-phpvm ls-remote [--ts] [--json]  distribuciones oficiales disponibles
+phpvm ls-remote [--ts] [--json]  parche oficial más reciente por rama
+phpvm ls-remote --all             todos los parches archivados
 phpvm current [--json]            distribución activa y metadatos
 phpvm which [build]               ruta al php.exe seleccionado
 phpvm uninstall <build>
@@ -75,6 +76,18 @@ phpvm prune                       conserva únicamente la distribución activa
 ```
 
 Usa `--no-progress` en entornos no interactivos o `--quiet` para ocultar los mensajes de estado.
+
+### Versiones históricas y EOL
+
+`phpvm` indexa el archivo oficial de Windows desde PHP 5.2. Un selector de rama elige su último parche:
+
+```powershell
+phpvm ls-remote --arch x86
+phpvm use --arch x86 --allow-unverified-archive 5.4
+phpvm install --allow-unverified-archive 5.6.40
+```
+
+Las distribuciones Windows de PHP 5.2–5.4 solo existen para x86; las versiones antiguas también pueden requerir su Microsoft Visual C++ Runtime correspondiente. El archivo no publica checksums SHA-256 para estos ZIP, por lo que instalarlos exige la aceptación explícita. `phpvm` registra el hash observado del archivo y sigue calculando el de `php.exe`, pero esto no autentica la descarga inicial. Las releases con soporte conservan la verificación oficial habitual.
 
 La identidad de una distribución incluye todas sus dimensiones de compatibilidad, por ejemplo `8.4.24-nts-x64`. Esto permite que TS/NTS o x64/x86 de la misma versión coexistan.
 
@@ -272,7 +285,7 @@ Las instalaciones son transaccionales:
 
 1. Un lock entre procesos serializa las modificaciones.
 2. El archivo se descarga a una ubicación temporal.
-3. Se verifica su checksum SHA-256 oficial.
+3. Se verifica su checksum SHA-256 oficial (salvo archivos EOL aceptados explícitamente, cuyo hash observado se registra).
 4. Se extrae en un directorio de preparación con protección contra ZIP traversal.
 5. Se valida y calcula el hash de `php.exe`.
 6. El directorio terminado se publica atómicamente.

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strings"
@@ -17,25 +18,30 @@ import (
 
 const releasesURL = "https://windows.php.net/downloads/releases/releases.json"
 const downloadBaseURL = "https://windows.php.net/downloads/releases/"
+const archivesURL = "https://downloads.php.net/~windows/releases/archives/"
 
 type Release struct {
-	Version string `json:"version"`
-	Variant string `json:"variant"`
-	Arch    string `json:"arch"`
-	URL     string `json:"url"`
-	SHA256  string `json:"sha256"`
+	Version  string `json:"version"`
+	Variant  string `json:"variant"`
+	Arch     string `json:"arch"`
+	URL      string `json:"url"`
+	SHA256   string `json:"sha256"`
+	Archived bool   `json:"archived"`
 }
 type Provider struct {
-	client    *http.Client
-	endpoint  string
-	cachePath string
-	cacheTTL  time.Duration
+	client           *http.Client
+	endpoint         string
+	archiveEndpoint  string
+	cachePath        string
+	archiveCachePath string
+	cacheTTL         time.Duration
 }
 
 func New(cacheRoot ...string) *Provider {
-	p := &Provider{client: &http.Client{Timeout: 30 * time.Second}, endpoint: releasesURL, cacheTTL: 6 * time.Hour}
+	p := &Provider{client: &http.Client{Timeout: 30 * time.Second}, endpoint: releasesURL, archiveEndpoint: archivesURL, cacheTTL: 6 * time.Hour}
 	if len(cacheRoot) > 0 && cacheRoot[0] != "" {
 		p.cachePath = filepath.Join(cacheRoot[0], "cache", "windows-releases.json")
+		p.archiveCachePath = filepath.Join(cacheRoot[0], "cache", "windows-archives.html")
 	}
 	if v := os.Getenv("PHPVM_CACHE_TTL"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {
@@ -53,6 +59,30 @@ type archive struct {
 }
 
 func (p *Provider) Versions(ctx context.Context, variant, targetArch string) ([]Release, error) {
+	all, err := p.allVersions(ctx, variant, targetArch)
+	if err != nil {
+		return nil, err
+	}
+	// Keep ls-remote useful: show the newest patch for every PHP minor.
+	seen := map[string]bool{}
+	out := make([]Release, 0, len(all))
+	for _, r := range all {
+		s := parseSemver(r.Version)
+		key := fmt.Sprintf("%d.%d", s.major, s.minor)
+		if !seen[key] {
+			seen[key] = true
+			out = append(out, r)
+		}
+	}
+	return out, nil
+}
+
+// AllVersions returns every available patch, including the official EOL archive.
+func (p *Provider) AllVersions(ctx context.Context, variant, targetArch string) ([]Release, error) {
+	return p.allVersions(ctx, variant, targetArch)
+}
+
+func (p *Provider) allVersions(ctx context.Context, variant, targetArch string) ([]Release, error) {
 	payload, err := p.registry(ctx)
 	if err != nil {
 		return nil, err
@@ -93,19 +123,61 @@ func (p *Provider) Versions(ctx context.Context, variant, targetArch string) ([]
 		}
 		out = append(out, Release{Version: version, Variant: variant, Arch: targetArch, URL: url, SHA256: a.Zip.SHA256})
 	}
+	archivePayload, archiveErr := p.archiveRegistry(ctx)
+	if archiveErr == nil {
+		out = append(out, parseArchiveIndex(archivePayload, p.archiveEndpoint, variant, targetArch)...)
+	}
+	// Prefer current registry records because they carry an official checksum.
+	byVersion := make(map[string]Release, len(out))
+	for _, r := range out {
+		old, ok := byVersion[r.Version]
+		if !ok || (old.Archived && !r.Archived) {
+			byVersion[r.Version] = r
+		}
+	}
+	out = out[:0]
+	for _, r := range byVersion {
+		out = append(out, r)
+	}
 	sort.Slice(out, func(i, j int) bool { return compare(out[i].Version, out[j].Version) > 0 })
 	return out, nil
 }
 
+var archiveZipPattern = regexp.MustCompile(`(?i)href="(php-(\d+\.\d+\.\d+)(-nts)?-Win32-(?:VC|VS)\d+-(x86|x64)\.zip)"`)
+
+func parseArchiveIndex(payload []byte, base, variant, targetArch string) []Release {
+	var out []Release
+	for _, m := range archiveZipPattern.FindAllSubmatch(payload, -1) {
+		v := "ts"
+		if len(m[3]) > 0 {
+			v = "nts"
+		}
+		arch := strings.ToLower(string(m[4]))
+		if v != variant || arch != targetArch {
+			continue
+		}
+		out = append(out, Release{Version: string(m[2]), Variant: v, Arch: arch, URL: strings.TrimRight(base, "/") + "/" + string(m[1]), Archived: true})
+	}
+	return out
+}
+
 func (p *Provider) registry(ctx context.Context) ([]byte, error) {
-	if p.cachePath != "" {
-		if st, err := os.Stat(p.cachePath); err == nil && time.Since(st.ModTime()) < p.cacheTTL {
-			if b, err := os.ReadFile(p.cachePath); err == nil {
+	return p.fetchCached(ctx, p.endpoint, p.cachePath, "release registry")
+}
+
+func (p *Provider) archiveRegistry(ctx context.Context) ([]byte, error) {
+	return p.fetchCached(ctx, p.archiveEndpoint, p.archiveCachePath, "release archive")
+}
+
+func (p *Provider) fetchCached(ctx context.Context, endpoint, cachePath, label string) ([]byte, error) {
+	if cachePath != "" {
+		if st, err := os.Stat(cachePath); err == nil && time.Since(st.ModTime()) < p.cacheTTL {
+			if b, err := os.ReadFile(cachePath); err == nil {
 				return b, nil
 			}
 		}
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.endpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -115,22 +187,22 @@ func (p *Provider) registry(ctx context.Context) ([]byte, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("release registry returned %s", resp.Status)
+		return nil, fmt.Errorf("%s returned %s", label, resp.Status)
 	}
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
-	if p.cachePath != "" {
-		if err := os.MkdirAll(filepath.Dir(p.cachePath), 0755); err == nil {
-			_ = os.WriteFile(p.cachePath, b, 0644)
+	if cachePath != "" {
+		if err := os.MkdirAll(filepath.Dir(cachePath), 0755); err == nil {
+			_ = os.WriteFile(cachePath, b, 0644)
 		}
 	}
 	return b, nil
 }
 
 func (p *Provider) Resolve(ctx context.Context, requested, variant, arch string) (Release, error) {
-	versions, err := p.Versions(ctx, variant, arch)
+	versions, err := p.allVersions(ctx, variant, arch)
 	if err != nil {
 		return Release{}, err
 	}

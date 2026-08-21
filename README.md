@@ -67,7 +67,8 @@ phpvm use --ts 8.4               thread-safe build
 phpvm use --arch x86 8.3         32-bit build
 phpvm install 8.4                install without activating
 phpvm ls [--json]                installed builds
-phpvm ls-remote [--ts] [--json] available official builds
+phpvm ls-remote [--ts] [--json] newest official patch per branch
+phpvm ls-remote --all            every archived patch
 phpvm current [--json]           active build and metadata
 phpvm which [build]              path to the selected php.exe
 phpvm uninstall <build>
@@ -75,6 +76,18 @@ phpvm prune                      retain only the active build
 ```
 
 Use `--no-progress` for non-interactive environments or `--quiet` to suppress status output.
+
+### Historical and EOL releases
+
+`phpvm` indexes the official Windows archive back to PHP 5.2. A minor selector resolves to its final patch:
+
+```powershell
+phpvm ls-remote --arch x86
+phpvm use --arch x86 --allow-unverified-archive 5.4
+phpvm install --allow-unverified-archive 5.6.40
+```
+
+PHP 5.2–5.4 Windows builds are x86-only; old builds may also require their matching Microsoft Visual C++ runtime. The archive does not publish SHA-256 checksums for these ZIPs, so installation requires the explicit opt-in. `phpvm` records the observed archive hash and still hashes `php.exe`, but this does not authenticate the initial download. Supported releases retain normal official checksum verification.
 
 A build identity includes all compatibility dimensions, for example `8.4.24-nts-x64`. This allows TS/NTS or x64/x86 builds of the same version to coexist.
 
@@ -272,7 +285,7 @@ Installations are transactional:
 
 1. An inter-process lock serializes modifications.
 2. The archive is downloaded to a temporary file.
-3. Its official SHA-256 checksum is verified.
+3. Its official SHA-256 checksum is verified (except explicitly opted-in EOL archives, whose observed hash is recorded).
 4. It is extracted into a staging directory with ZIP traversal protection.
 5. `php.exe` is validated and hashed.
 6. The completed directory is atomically published.

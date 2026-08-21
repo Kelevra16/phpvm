@@ -25,6 +25,7 @@ func TestRegistryCache(t *testing.T) {
 	}))
 	p := New(t.TempDir())
 	p.endpoint = srv.URL
+	p.archiveEndpoint = "://invalid"
 	p.cacheTTL = time.Hour
 	if _, err := p.Versions(context.Background(), "nts", "x64"); err != nil {
 		t.Fatal(err)
@@ -35,6 +36,17 @@ func TestRegistryCache(t *testing.T) {
 	}
 	if calls != 1 {
 		t.Fatalf("registry called %d times", calls)
+	}
+}
+
+func TestParseArchiveIndex(t *testing.T) {
+	html := []byte(`<a href="php-5.6.40-nts-Win32-VC11-x64.zip">nts</a>
+<a href="php-5.6.40-Win32-VC11-x64.zip">ts</a>
+<a href="php-5.4.45-nts-Win32-VC9-x86.zip">x86</a>
+<a href="php-debug-pack-5.6.40-nts-Win32-VC11-x64.zip">debug</a>`)
+	r := parseArchiveIndex(html, archivesURL, "nts", "x64")
+	if len(r) != 1 || r[0].Version != "5.6.40" || !r[0].Archived || r[0].SHA256 != "" {
+		t.Fatalf("unexpected archive releases: %#v", r)
 	}
 }
 

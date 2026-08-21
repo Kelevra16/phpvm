@@ -159,6 +159,11 @@ func (s *Store) installUnlocked(ctx context.Context, m Metadata) error {
 	if m.ArchiveSHA256 != "" && !strings.EqualFold(got, m.ArchiveSHA256) {
 		return fmt.Errorf("checksum mismatch: got %s", got)
 	}
+	if m.ArchiveSHA256 == "" {
+		// Historical Windows builds do not publish adjacent SHA-256 values.
+		// Record the observed hash so repair and metadata remain reproducible.
+		m.ArchiveSHA256 = got
+	}
 	stage, err := os.MkdirTemp(s.versionsDir(), ".install-")
 	if err != nil {
 		return err
