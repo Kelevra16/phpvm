@@ -12,6 +12,9 @@
 - Composer constraint selection for caret, tilde, comparisons, wildcards, AND, and OR expressions.
 - Public installer validation in CI.
 - Issue templates, contribution guidance, and a security policy.
+- `phpvm shell [version|--current]` for terminal-local PHP sessions that can run concurrently.
+- Dynamic `php` and `phpize` shims with session, project, and global resolution priority.
+- `phpvm resolve [--path] [version]` for inspecting the effective build.
 
 ### Fixed
 

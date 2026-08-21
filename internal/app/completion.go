@@ -6,7 +6,7 @@ import (
 
 const powershellCompletion = `Register-ArgumentCompleter -Native -CommandName phpvm -ScriptBlock {
     param($wordToComplete, $commandAst, $cursorPosition)
-    $commands = @('use','install','ls','list','ls-remote','current','which','uninstall','prune','verify','repair','doctor','clean','exec','matrix','alias','sync','ini','profile','ext','logs','cache','self-update','completion','laragon','version','help')
+    $commands = @('use','install','ls','list','ls-remote','current','which','resolve','shell','uninstall','prune','verify','repair','doctor','clean','exec','matrix','alias','sync','ini','profile','ext','logs','cache','self-update','completion','laragon','version','help')
     $parts = @($commandAst.CommandElements | ForEach-Object { $_.Extent.Text })
     if ($parts.Count -le 2) {
         $commands | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object {
@@ -27,7 +27,7 @@ const powershellCompletion = `Register-ArgumentCompleter -Native -CommandName ph
         }
         return
     }
-    if ($command -in @('use','uninstall','verify','repair','which')) {
+    if ($command -in @('use','shell','resolve','uninstall','verify','repair','which')) {
         (& phpvm ls 2>$null) -replace '^\*?\s+', '' | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object {
             [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_)
         }

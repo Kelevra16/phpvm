@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -74,5 +75,12 @@ func TestAbandonedLockIsRecovered(t *testing.T) {
 	}
 	if !called {
 		t.Fatal("locked operation was not called")
+	}
+}
+
+func TestDynamicWrapperUsesProjectResolver(t *testing.T) {
+	wrapper := dynamicWrapper("php")
+	if !strings.Contains(wrapper, "phpvm resolve --path --tool php") {
+		t.Fatalf("wrapper does not use dynamic resolver: %s", wrapper)
 	}
 }

@@ -167,6 +167,46 @@ Run the same command against several PHP branches:
 phpvm matrix 8.2 8.3 8.4 -- php vendor/bin/phpunit
 ```
 
+## Concurrent projects and isolated shells
+
+Open independent PowerShell sessions for projects that require different PHP versions:
+
+```powershell
+# Terminal A
+cd C:\projects\legacy-app
+phpvm shell 7.4
+php --version
+
+# Terminal B
+cd C:\projects\modern-app
+phpvm shell 8.5
+php --version
+```
+
+The child terminal sets `PHPVM_ACTIVE` and prepends only its selected PHP directory to `PATH`. Type `exit` to return to the parent terminal. The global version is not changed.
+
+```text
+phpvm shell 8.4        install if needed and open an isolated shell
+phpvm shell            resolve the current project and open a shell
+phpvm shell --current  use the global build in an isolated shell
+```
+
+The stable `php.cmd` wrapper also resolves a build on every invocation, allowing different project directories to use different installed versions concurrently. Resolution priority is:
+
+```text
+PHPVM_ACTIVE → project configuration → global current build
+```
+
+Project configuration means `.php-version`, `phpvm.toml`, or the supported Composer constraint. The shim never downloads PHP implicitly; when a project build is missing it asks you to run `phpvm sync`.
+
+Inspect the selected build or executable without running PHP:
+
+```text
+phpvm resolve
+phpvm resolve --path
+phpvm resolve 8.4
+```
+
 Named aliases are stored independently from installed builds:
 
 ```text

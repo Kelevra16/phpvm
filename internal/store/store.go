@@ -57,7 +57,11 @@ func (s *Store) Installed() ([]Metadata, error) {
 	}
 	var out []Metadata
 	for _, e := range entries {
-		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+		if strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		st, statErr := os.Stat(filepath.Join(s.versionsDir(), e.Name()))
+		if statErr != nil || !st.IsDir() {
 			continue
 		}
 		m, err := s.Metadata(e.Name())
@@ -96,8 +100,8 @@ func (s *Store) useUnlocked(id string) error {
 		return fmt.Errorf("PHP build %s is not installed", id)
 	}
 	wrappers := map[string]string{
-		"php.cmd":    "@echo off\r\n\"%~dp0..\\versions\\" + id + "\\php.exe\" %*\r\n",
-		"phpize.cmd": "@echo off\r\n\"%~dp0..\\versions\\" + id + "\\phpize.bat\" %*\r\n",
+		"php.cmd":    dynamicWrapper("php"),
+		"phpize.cmd": dynamicWrapper("phpize"),
 	}
 	for name, body := range wrappers {
 		if err := atomicWrite(filepath.Join(s.Root, "bin", name), []byte(body)); err != nil {
@@ -105,6 +109,10 @@ func (s *Store) useUnlocked(id string) error {
 		}
 	}
 	return atomicWrite(s.currentFile(), []byte(id+"\n"))
+}
+
+func dynamicWrapper(tool string) string {
+	return "@echo off\r\nset \"PHPVM_TOOL_PATH=\"\r\nfor /f \"usebackq delims=\" %%P in (`phpvm resolve --path --tool " + tool + "`) do set \"PHPVM_TOOL_PATH=%%P\"\r\nif not defined PHPVM_TOOL_PATH exit /b 1\r\n\"%PHPVM_TOOL_PATH%\" %*\r\n"
 }
 
 func (s *Store) Install(ctx context.Context, m Metadata) error {

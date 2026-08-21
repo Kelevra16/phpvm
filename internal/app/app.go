@@ -82,6 +82,10 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return a.current(s, args[1:])
 	case "which":
 		return a.which(s, args[1:])
+	case "resolve":
+		return a.resolve(s, args[1:])
+	case "shell":
+		return a.shell(ctx, s, args[1:])
 	case "cache":
 		return a.cache(s, args[1:])
 	case "self-update":
@@ -574,6 +578,7 @@ Usage:
   phpvm ls [--json]                 phpvm ls-remote [--ts] [--json]
   phpvm current [--json]            phpvm verify [build]
   phpvm which [build]               phpvm cache <dir|clear>
+  phpvm resolve [--path] [version]  phpvm shell [version|--current]
   phpvm self-update                 phpvm completion powershell
   phpvm repair [build]              phpvm doctor [--json]
   phpvm exec [version] -- <command> phpvm matrix <versions...> -- <command>

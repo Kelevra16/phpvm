@@ -211,6 +211,9 @@ func satisfies(version, constraint string) bool {
 	}
 	return false
 }
+
+// Satisfies reports whether a PHP version matches a supported Composer-style constraint.
+func Satisfies(version, constraint string) bool { return satisfies(version, constraint) }
 func satisfiesToken(v semver, token string) bool {
 	token = strings.TrimSpace(token)
 	if token == "" || token == "*" {
