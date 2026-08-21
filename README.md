@@ -1,5 +1,7 @@
 # phpvm
 
+**Languages:** English · [Español](README.es.md)
+
 [![CI](https://github.com/Kelevra16/phpvm/actions/workflows/ci.yml/badge.svg)](https://github.com/Kelevra16/phpvm/actions/workflows/ci.yml)
 [![Release](https://github.com/Kelevra16/phpvm/actions/workflows/release.yml/badge.svg)](https://github.com/Kelevra16/phpvm/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -19,7 +21,7 @@ irm https://raw.githubusercontent.com/Kelevra16/phpvm/main/install.ps1 | iex
 Install a specific release:
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Kelevra16/phpvm/main/install.ps1))) -Version v0.1.0
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Kelevra16/phpvm/main/install.ps1))) -Version v0.2.0
 ```
 
 The installer:
