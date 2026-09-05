@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.7.0-rc5] - 2026-09-05
+
+### Changed
+
+- The development baseline is now Go 1.26, with Go 1.26.8 declared as the preferred toolchain and CI coverage updated accordingly.
+- Dynamic console messages now use explicit string formatting to satisfy Go 1.26's stricter printf analysis and prevent accidental format interpretation.
+
 ## [0.7.0-rc4] - 2026-09-05
 
 ### Fixed
@@ -100,7 +107,8 @@
 
 - First Windows release with version installation, TS/NTS and x64/x86 builds, project configuration, profiles, extensions, logs, diagnostics, integrity verification, aliases, execution matrices, and transactional storage.
 
-[Unreleased]: https://github.com/Kelevra16/phpvm/compare/v0.7.0-rc4...HEAD
+[Unreleased]: https://github.com/Kelevra16/phpvm/compare/v0.7.0-rc5...HEAD
+[0.7.0-rc5]: https://github.com/Kelevra16/phpvm/compare/v0.7.0-rc4...v0.7.0-rc5
 [0.7.0-rc4]: https://github.com/Kelevra16/phpvm/compare/v0.7.0-rc3...v0.7.0-rc4
 [0.7.0-rc3]: https://github.com/Kelevra16/phpvm/compare/v0.7.0-rc2...v0.7.0-rc3
 [0.7.0-rc2]: https://github.com/Kelevra16/phpvm/compare/v0.7.0-rc1...v0.7.0-rc2

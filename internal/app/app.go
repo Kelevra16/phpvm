@@ -201,7 +201,7 @@ func (a *App) Run(ctx context.Context, args []string) error {
 				return confirmErr
 			}
 			if !confirmed {
-				a.ui.Info(tr("Cancelled", "Cancelado"))
+				a.ui.Info("%s", tr("Cancelled", "Cancelado"))
 				return nil
 			}
 		}
@@ -221,7 +221,7 @@ func (a *App) Run(ctx context.Context, args []string) error {
 				return confirmErr
 			}
 			if !confirmed {
-				a.ui.Info(tr("Cancelled", "Cancelado"))
+				a.ui.Info("%s", tr("Cancelled", "Cancelado"))
 				return nil
 			}
 		}
@@ -483,7 +483,7 @@ func (a *App) repair(ctx context.Context, s *store.Store, args []string) error {
 			return confirmErr
 		}
 		if !confirmed {
-			a.ui.Info(tr("Cancelled", "Cancelado"))
+			a.ui.Info("%s", tr("Cancelled", "Cancelado"))
 			return nil
 		}
 	}
@@ -819,5 +819,5 @@ func (a *App) help() {
 		{"phpvm completion powershell", "Generate PowerShell completion", "Generar autocompletado de PowerShell"},
 	})
 	fmt.Fprintln(a.Out)
-	a.ui.Info(tr("Tip: PHPVM_LANG=es translates guided output; --plain disables decoration.", "Consejo: PHPVM_LANG=es traduce la interfaz; --plain desactiva la decoración."))
+	a.ui.Info("%s", tr("Tip: PHPVM_LANG=es translates guided output; --plain disables decoration.", "Consejo: PHPVM_LANG=es traduce la interfaz; --plain desactiva la decoración."))
 }

@@ -478,7 +478,7 @@ func (a *App) dashboard(s *store.Store, args []string) error {
 	}
 	a.ui.Banner(a.Version, tr("Your PHP workspace at a glance", "Tu entorno PHP de un vistazo"))
 	if err := a.status(s, nil); err != nil {
-		a.ui.Info(tr("No PHP is selected yet. Next: phpvm install", "Aún no hay un PHP seleccionado. Siguiente: phpvm install"))
+		a.ui.Info("%s", tr("No PHP is selected yet. Next: phpvm install", "Aún no hay un PHP seleccionado. Siguiente: phpvm install"))
 	}
 	return nil
 }
@@ -629,7 +629,7 @@ func (a *App) initProject(s *store.Store, args []string) error {
 		return err
 	}
 	a.ui.Success(tr("Created %s", "Creado %s"), path)
-	a.ui.Info(tr("Next: review the file, run 'phpvm trust project', then 'phpvm sync'", "Siguiente: revisa el archivo, ejecuta 'phpvm trust project' y después 'phpvm sync'"))
+	a.ui.Info("%s", tr("Next: review the file, run 'phpvm trust project', then 'phpvm sync'", "Siguiente: revisa el archivo, ejecuta 'phpvm trust project' y después 'phpvm sync'"))
 	return nil
 }
 

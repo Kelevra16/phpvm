@@ -54,7 +54,7 @@ go test ./...
 go build -o phpvm.exe ./cmd/phpvm
 ```
 
-Se requiere Go 1.20 o posterior.
+Se requiere Go 1.26 o posterior. Actualmente el módulo prefiere el toolchain Go 1.26.8.
 
 Coloca `phpvm.exe` en `PATH` y añade una sola vez `%USERPROFILE%\.phpvm\bin`. Usa `PHPVM_ROOT` para cambiar el directorio de almacenamiento predeterminado.
 

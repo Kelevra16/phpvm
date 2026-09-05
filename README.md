@@ -54,7 +54,7 @@ go test ./...
 go build -o phpvm.exe ./cmd/phpvm
 ```
 
-Go 1.20 or newer is supported.
+Go 1.26 or newer is supported. The module currently prefers the Go 1.26.8 toolchain.
 
 Put `phpvm.exe` on `PATH`, then add `%USERPROFILE%\.phpvm\bin` to `PATH` once. Set `PHPVM_ROOT` to use a different storage root.
 
