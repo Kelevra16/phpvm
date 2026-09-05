@@ -2,8 +2,13 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-04
+
 ### Added
 
+- Ready-to-use development `php.ini` provisioning for new PHP builds, including common bundled extensions, staging validation, metadata, and `phpvm ini defaults` for existing builds.
+- Project-aware `ini` and `ext` targeting with explicit `--project`, `--global`, and `--version` overrides.
+- Interactive console presentation with color, Unicode status symbols, compact progress bars, readable tables, `NO_COLOR`, `--plain`, `--no-color`, and `--verbose` support.
 - Historical Windows PHP catalog back to 5.2, compact/all listings, EOL warnings, lifecycle channels, and build information.
 - Versioned historical checksum manifest plus explicit opt-in for archive packages without a maintained hash.
 - Post-install executable/runtime validation and Visual C++ diagnostics.
@@ -14,6 +19,11 @@
 - `phpvm self-update` with GitHub Release checksum verification and deferred executable replacement.
 - `phpvm which [build]`.
 - `phpvm cache dir|clear`.
+- Project environment summaries with `phpvm status` and Composer platform checks with `phpvm check`.
+- Content-sensitive project trust, `PHPVM_SAFE_MODE`, and guarded project execution workflows.
+- Development server launcher, safe `doctor --fix`, and framework-oriented INI presets.
+- Attestation-verified PIE setup and execution against the project-selected PHP build.
+- Content-addressed PHP archive cache, strict `--offline` installation, cache verification, and portable checksum-manifest bundles.
 - Native PowerShell completion generation.
 - Laragon detection and safe junction management.
 - Composer constraint selection for caret, tilde, comparisons, wildcards, AND, and OR expressions.
@@ -31,5 +41,6 @@
 
 - First Windows release with version installation, TS/NTS and x64/x86 builds, project configuration, profiles, extensions, logs, diagnostics, integrity verification, aliases, execution matrices, and transactional storage.
 
-[Unreleased]: https://github.com/Kelevra16/phpvm/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Kelevra16/phpvm/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/Kelevra16/phpvm/compare/v0.1.0...v0.5.0
 [0.1.0]: https://github.com/Kelevra16/phpvm/releases/tag/v0.1.0

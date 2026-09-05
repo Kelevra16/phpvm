@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/Kelevra16/phpvm/internal/store"
+	"github.com/Kelevra16/phpvm/internal/windowsphp"
 )
 
 func activeDir(s *store.Store) (string, string, error) {
@@ -20,6 +21,82 @@ func activeDir(s *store.Store) (string, string, error) {
 		return "", "", err
 	}
 	return id, filepath.Dir(s.Executable(id)), nil
+}
+
+// environmentTarget selects the build modified by ini/ext. The effective
+// project/session build is the default so administration matches `php -v`.
+func environmentTarget(s *store.Store, args []string) (string, string, []string, error) {
+	mode, version := "effective", ""
+	rest := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--project":
+			if mode != "effective" {
+				return "", "", nil, fmt.Errorf("only one of --project, --global, or --version may be used")
+			}
+			mode = "project"
+		case "--global":
+			if mode != "effective" {
+				return "", "", nil, fmt.Errorf("only one of --project, --global, or --version may be used")
+			}
+			mode = "global"
+		case "--version":
+			if mode != "effective" || i+1 >= len(args) {
+				return "", "", nil, fmt.Errorf("--version requires one value and cannot be combined with another target")
+			}
+			if strings.HasPrefix(args[i+1], "--") {
+				return "", "", nil, fmt.Errorf("--version requires a version value")
+			}
+			mode = "version"
+			i++
+			version = args[i]
+		default:
+			rest = append(rest, args[i])
+		}
+	}
+	var id string
+	var err error
+	switch mode {
+	case "global":
+		id, err = s.Current()
+	case "version":
+		id, err = resolveRuntimeBuild(s, version)
+	case "project":
+		cfg, cfgErr := findProjectConfig()
+		if cfgErr != nil {
+			return "", "", nil, cfgErr
+		}
+		if cfg.Version == "" {
+			return "", "", nil, fmt.Errorf("no project PHP version found")
+		}
+		id, err = resolveProjectConfigBuild(s, cfg)
+	default:
+		id, err = resolveRuntimeBuild(s, "")
+	}
+	if err != nil {
+		return "", "", nil, err
+	}
+	return id, filepath.Dir(s.Executable(id)), rest, nil
+}
+
+func resolveProjectConfigBuild(s *store.Store, cfg projectConfig) (string, error) {
+	builds, err := s.Installed()
+	if err != nil {
+		return "", err
+	}
+	sort.Slice(builds, func(i, j int) bool { return comparePHP(builds[i].Version, builds[j].Version) > 0 })
+	for _, m := range builds {
+		if cfg.Variant != "" && m.Variant != cfg.Variant {
+			continue
+		}
+		if cfg.Arch != "" && m.Arch != cfg.Arch {
+			continue
+		}
+		if m.Version == cfg.Version || windowsphp.Satisfies(m.Version, cfg.Version) {
+			return m.ID(), nil
+		}
+	}
+	return "", fmt.Errorf("project requires PHP %s (%s), but no installed build matches; run phpvm sync", cfg.Version, cfg.Source)
 }
 func ensureINI(dir string) (string, error) {
 	path := filepath.Join(dir, "php.ini")
@@ -41,9 +118,12 @@ func ensureINI(dir string) (string, error) {
 	return path, setINI(path, "extension_dir", `"`+filepath.Join(dir, "ext")+`"`)
 }
 func (a *App) ini(s *store.Store, args []string) error {
-	_, dir, err := activeDir(s)
+	id, dir, args, err := environmentTarget(s, args)
 	if err != nil {
 		return err
+	}
+	if a.ui != nil {
+		a.ui.Debug("INI target: %s", id)
 	}
 	path, err := ensureINI(dir)
 	if err != nil {
@@ -64,6 +144,21 @@ func (a *App) ini(s *store.Store, args []string) error {
 	if len(args) == 1 && args[0] == "reset" {
 		return resetINI(dir)
 	}
+	if len(args) == 1 && args[0] == "defaults" {
+		extensions, err := store.ConfigureDefaults(dir)
+		if err != nil {
+			return err
+		}
+		if _, err = ensureINI(dir); err != nil {
+			return err
+		}
+		fmt.Fprintln(a.Out, "Applied development defaults to", id)
+		fmt.Fprintln(a.Out, "Enabled extensions:", strings.Join(extensions, ", "))
+		return nil
+	}
+	if len(args) == 2 && args[0] == "preset" {
+		return a.applyINIPreset(id, dir, args[1])
+	}
 	if len(args) == 1 && args[0] == "diff" {
 		return a.diffINI(dir, path)
 	}
@@ -71,7 +166,7 @@ func (a *App) ini(s *store.Store, args []string) error {
 		if err := setINI(path, args[1], args[2]); err != nil {
 			return err
 		}
-		fmt.Fprintln(a.Out, args[1], "=", args[2])
+		fmt.Fprintln(a.Out, args[1], "=", args[2], "for", id)
 		return nil
 	}
 	if len(args) == 2 && args[0] == "get" {
@@ -86,7 +181,7 @@ func (a *App) ini(s *store.Store, args []string) error {
 		fmt.Fprintln(a.Out, v)
 		return nil
 	}
-	return fmt.Errorf("usage: phpvm ini path|show|diff|reset|get <key>|set <key> <value>")
+	return fmt.Errorf("usage: phpvm ini [--project|--global|--version <version>] path|show|diff|reset|defaults|preset <name>|get <key>|set <key> <value>")
 }
 
 func resetINI(dir string) error {
@@ -215,9 +310,12 @@ func (a *App) profile(s *store.Store, args []string) error {
 }
 
 func (a *App) extensions(s *store.Store, args []string) error {
-	_, dir, err := activeDir(s)
+	id, dir, args, err := environmentTarget(s, args)
 	if err != nil {
 		return err
+	}
+	if a.ui != nil {
+		a.ui.Debug("extension target: %s", id)
 	}
 	path, err := ensureINI(dir)
 	if err != nil {
@@ -251,7 +349,7 @@ func (a *App) extensions(s *store.Store, args []string) error {
 		if err := toggleExtension(path, name, args[0] == "enable"); err != nil {
 			return err
 		}
-		fmt.Fprintln(a.Out, args[0]+"d", name)
+		fmt.Fprintln(a.Out, args[0]+"d", name, "for", id)
 		return nil
 	}
 	if len(args) == 2 && args[0] == "install" {
@@ -297,7 +395,7 @@ func (a *App) extensions(s *store.Store, args []string) error {
 		}
 		return nil
 	}
-	return fmt.Errorf("usage: phpvm ext ls|enable <name>|disable <name>|search <term>|install <https-zip>|update")
+	return fmt.Errorf("usage: phpvm ext [--project|--global|--version <version>] ls|enable <name>|disable <name>|search <term>|install <https-zip>|update")
 }
 
 func (a *App) installExtensionPackage(dir, iniPath, url string, announce bool) error {
@@ -361,12 +459,16 @@ func toggleExtension(path, name string, enable bool) error {
 		if strings.HasPrefix(plain, "extension=") || strings.HasPrefix(plain, "extension =") {
 			v := strings.Trim(strings.TrimSpace(strings.SplitN(plain, "=", 2)[1]), "\"")
 			if v == dll || v == name {
-				found = true
 				if enable {
-					lines[i] = "extension=" + dll
+					if found {
+						lines[i] = ";extension=" + dll
+					} else {
+						lines[i] = "extension=" + dll
+					}
 				} else {
 					lines[i] = ";extension=" + dll
 				}
+				found = true
 			}
 		}
 	}

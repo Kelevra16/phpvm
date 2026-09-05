@@ -63,3 +63,31 @@ func TestResolveMissingProjectBuildSuggestsSync(t *testing.T) {
 		t.Fatal("expected missing build error")
 	}
 }
+
+func TestEnvironmentTargetDefaultsToProjectAndSupportsOverrides(t *testing.T) {
+	s := store.New(t.TempDir())
+	id74 := addTestBuild(t, s, "7.4.33")
+	id85 := addTestBuild(t, s, "8.5.9")
+	if err := os.WriteFile(filepath.Join(s.Root, "current"), []byte(id74), 0644); err != nil {
+		t.Fatal(err)
+	}
+	project := t.TempDir()
+	if err := os.WriteFile(filepath.Join(project, ".php-version"), []byte("8.5"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	old, _ := os.Getwd()
+	if err := os.Chdir(project); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(old)
+	t.Setenv("PHPVM_ACTIVE", "")
+	if id, _, rest, err := environmentTarget(s, []string{"enable", "mbstring"}); err != nil || id != id85 || len(rest) != 2 {
+		t.Fatalf("effective target = %q %v %v", id, rest, err)
+	}
+	if id, _, _, err := environmentTarget(s, []string{"enable", "mbstring", "--global"}); err != nil || id != id74 {
+		t.Fatalf("global target = %q %v", id, err)
+	}
+	if id, _, _, err := environmentTarget(s, []string{"--version", "7.4", "path"}); err != nil || id != id74 {
+		t.Fatalf("version target = %q %v", id, err)
+	}
+}

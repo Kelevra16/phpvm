@@ -21,18 +21,20 @@ import (
 )
 
 type Metadata struct {
-	Version          string    `json:"version"`
-	Variant          string    `json:"variant"`
-	Arch             string    `json:"arch"`
-	URL              string    `json:"url"`
-	ArchiveSHA256    string    `json:"archiveSha256"`
-	ExecutableSHA256 string    `json:"executableSha256"`
-	InstalledAt      time.Time `json:"installedAt"`
-	Imported         bool      `json:"imported,omitempty"`
-	ValidationError  string    `json:"validationError,omitempty"`
-	ValidatedAt      time.Time `json:"validatedAt,omitempty"`
-	Runtime          string    `json:"runtime,omitempty"`
-	SourceKind       string    `json:"sourceKind,omitempty"`
+	Version           string    `json:"version"`
+	Variant           string    `json:"variant"`
+	Arch              string    `json:"arch"`
+	URL               string    `json:"url"`
+	ArchiveSHA256     string    `json:"archiveSha256"`
+	ExecutableSHA256  string    `json:"executableSha256"`
+	InstalledAt       time.Time `json:"installedAt"`
+	Imported          bool      `json:"imported,omitempty"`
+	ValidationError   string    `json:"validationError,omitempty"`
+	ValidatedAt       time.Time `json:"validatedAt,omitempty"`
+	Runtime           string    `json:"runtime,omitempty"`
+	SourceKind        string    `json:"sourceKind,omitempty"`
+	INIProfile        string    `json:"iniProfile,omitempty"`
+	DefaultExtensions []string  `json:"defaultExtensions,omitempty"`
 }
 
 // Import copies an existing PHP distribution into managed storage.
@@ -104,6 +106,7 @@ type Store struct {
 	Root     string
 	Progress func(downloaded, total int64)
 	Validate func(context.Context, string) error
+	Offline  bool
 }
 
 func New(root string) *Store                   { return &Store{Root: root, Validate: validatePHP} }
@@ -200,33 +203,9 @@ func (s *Store) installUnlocked(ctx context.Context, m Metadata) error {
 	}
 	archivePath := tmp.Name()
 	defer os.Remove(archivePath)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.URL, nil)
+	got, err := s.obtainArchive(ctx, m, tmp)
 	if err != nil {
-		tmp.Close()
 		return err
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		tmp.Close()
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		tmp.Close()
-		return fmt.Errorf("download returned %s", resp.Status)
-	}
-	h := sha256.New()
-	pw := &progressWriter{total: resp.ContentLength, fn: s.Progress}
-	if _, err := io.Copy(io.MultiWriter(tmp, h, pw), resp.Body); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	got := hex.EncodeToString(h.Sum(nil))
-	if m.ArchiveSHA256 != "" && !strings.EqualFold(got, m.ArchiveSHA256) {
-		return fmt.Errorf("checksum mismatch: got %s", got)
 	}
 	if m.ArchiveSHA256 == "" {
 		// Historical Windows builds do not publish adjacent SHA-256 values.
@@ -249,11 +228,20 @@ func (s *Store) installUnlocked(ctx context.Context, m Metadata) error {
 	if err != nil {
 		return err
 	}
+	enabled, err := configureDefaultPHP(stage)
+	if err != nil {
+		return fmt.Errorf("configure staged PHP: %w", err)
+	}
+	m.INIProfile = "development"
+	m.DefaultExtensions = enabled
 	if s.Validate != nil {
 		if err := s.Validate(ctx, php); err != nil {
 			return fmt.Errorf("validate staged PHP: %w", err)
 		}
 		m.ValidatedAt = time.Now().UTC()
+	}
+	if err := setINIDirective(filepath.Join(stage, "php.ini"), "extension_dir", `"`+filepath.Join(s.installation(m.ID()), "ext")+`"`); err != nil {
+		return err
 	}
 	m.InstalledAt = time.Now().UTC()
 	b, _ := json.MarshalIndent(m, "", "  ")
@@ -264,6 +252,210 @@ func (s *Store) installUnlocked(ctx context.Context, m Metadata) error {
 		return fmt.Errorf("publish installation: %w", err)
 	}
 	return nil
+}
+
+func (s *Store) obtainArchive(ctx context.Context, m Metadata, tmp *os.File) (string, error) {
+	expected := m.ArchiveSHA256
+	if expected == "" {
+		index := map[string]string{}
+		if b, err := os.ReadFile(filepath.Join(s.Root, "cache", "archive-index.json")); err == nil {
+			_ = json.Unmarshal(b, &index)
+			expected = index[m.URL]
+		}
+	}
+	cachePath := ""
+	if expected != "" {
+		cachePath = filepath.Join(s.Root, "cache", "archives", strings.ToLower(expected)+".zip")
+		if cached, err := os.Open(cachePath); err == nil {
+			h := sha256.New()
+			_, copyErr := io.Copy(io.MultiWriter(tmp, h), cached)
+			closeErr := cached.Close()
+			if copyErr == nil && closeErr == nil {
+				got := hex.EncodeToString(h.Sum(nil))
+				if strings.EqualFold(got, expected) {
+					return got, tmp.Close()
+				}
+			}
+			if _, err := tmp.Seek(0, io.SeekStart); err != nil {
+				return "", err
+			}
+			if err := tmp.Truncate(0); err != nil {
+				return "", err
+			}
+		}
+	}
+	if s.Offline {
+		tmp.Close()
+		return "", fmt.Errorf("offline mode: verified PHP archive is not available in cache")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.URL, nil)
+	if err != nil {
+		tmp.Close()
+		return "", err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		tmp.Close()
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		tmp.Close()
+		return "", fmt.Errorf("download returned %s", resp.Status)
+	}
+	h := sha256.New()
+	pw := &progressWriter{total: resp.ContentLength, fn: s.Progress}
+	if _, err := io.Copy(io.MultiWriter(tmp, h, pw), resp.Body); err != nil {
+		tmp.Close()
+		return "", err
+	}
+	if err := tmp.Close(); err != nil {
+		return "", err
+	}
+	got := hex.EncodeToString(h.Sum(nil))
+	if m.ArchiveSHA256 != "" && !strings.EqualFold(got, m.ArchiveSHA256) {
+		return "", fmt.Errorf("checksum mismatch: got %s", got)
+	}
+	if err := os.MkdirAll(filepath.Join(s.Root, "cache", "archives"), 0755); err == nil {
+		finalCache := filepath.Join(s.Root, "cache", "archives", strings.ToLower(got)+".zip")
+		if _, err := os.Stat(finalCache); os.IsNotExist(err) {
+			_ = copyFile(tmp.Name(), finalCache)
+		}
+		indexPath := filepath.Join(s.Root, "cache", "archive-index.json")
+		index := map[string]string{}
+		if b, err := os.ReadFile(indexPath); err == nil {
+			_ = json.Unmarshal(b, &index)
+		}
+		index[m.URL] = got
+		if b, err := json.MarshalIndent(index, "", "  "); err == nil {
+			_ = atomicWrite(indexPath, append(b, '\n'))
+		}
+	}
+	return got, nil
+}
+
+func copyFile(source, destination string) error {
+	in, err := os.Open(source)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(destination, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	_, copyErr := io.Copy(out, in)
+	closeErr := out.Close()
+	if copyErr != nil {
+		_ = os.Remove(destination)
+		return copyErr
+	}
+	if closeErr != nil {
+		_ = os.Remove(destination)
+		return closeErr
+	}
+	return nil
+}
+
+var usefulDefaultExtensions = []string{"curl", "fileinfo", "mbstring", "openssl", "intl", "mysqli", "pdo_mysql", "gd", "zip", "sodium"}
+
+// ConfigureDefaults creates a practical development php.ini for an existing build.
+func ConfigureDefaults(dir string) ([]string, error) { return configureDefaultPHP(dir) }
+
+func configureDefaultPHP(dir string) ([]string, error) {
+	ini := filepath.Join(dir, "php.ini")
+	var content []byte
+	for _, name := range []string{"php.ini-development", "php.ini-production"} {
+		b, err := os.ReadFile(filepath.Join(dir, name))
+		if err == nil {
+			content = b
+			break
+		}
+	}
+	if content == nil {
+		content = []byte{}
+	}
+	if err := os.WriteFile(ini, content, 0644); err != nil {
+		return nil, err
+	}
+	settings := map[string]string{"extension_dir": `"` + filepath.Join(dir, "ext") + `"`, "error_reporting": "E_ALL", "display_errors": "On", "display_startup_errors": "On", "log_errors": "On", "memory_limit": "512M", "max_execution_time": "120"}
+	for key, value := range settings {
+		if err := setINIDirective(ini, key, value); err != nil {
+			return nil, err
+		}
+	}
+	var enabled []string
+	for _, name := range usefulDefaultExtensions {
+		dll := "php_" + name + ".dll"
+		if st, err := os.Stat(filepath.Join(dir, "ext", dll)); err != nil || st.IsDir() {
+			continue
+		}
+		if err := setExtensionDirective(ini, name, true); err != nil {
+			return nil, err
+		}
+		enabled = append(enabled, name)
+	}
+	return enabled, nil
+}
+
+func setINIDirective(path, key, value string) error {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(strings.ReplaceAll(string(b), "\r\n", "\n"), "\n")
+	found := false
+	for i, line := range lines {
+		trim := strings.TrimSpace(line)
+		if strings.HasPrefix(trim, ";") {
+			continue
+		}
+		parts := strings.SplitN(trim, "=", 2)
+		if len(parts) == 2 && strings.EqualFold(strings.TrimSpace(parts[0]), key) {
+			if !found {
+				lines[i] = key + " = " + value
+				found = true
+			} else {
+				lines[i] = ";" + line
+			}
+		}
+	}
+	if !found {
+		lines = append(lines, key+" = "+value)
+	}
+	return os.WriteFile(path, []byte(strings.Join(lines, "\r\n")), 0644)
+}
+
+func setExtensionDirective(path, name string, enable bool) error {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(strings.ReplaceAll(string(b), "\r\n", "\n"), "\n")
+	dll := "php_" + name + ".dll"
+	found := false
+	for i, line := range lines {
+		plain := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), ";"))
+		parts := strings.SplitN(plain, "=", 2)
+		if len(parts) != 2 || !strings.EqualFold(strings.TrimSpace(parts[0]), "extension") {
+			continue
+		}
+		v := strings.Trim(strings.TrimSpace(parts[1]), "\"")
+		normalized := strings.TrimSuffix(strings.TrimPrefix(strings.ToLower(v), "php_"), ".dll")
+		if normalized != strings.ToLower(name) {
+			continue
+		}
+		if enable && !found {
+			lines[i] = "extension=" + dll
+		} else {
+			lines[i] = ";extension=" + dll
+		}
+		found = true
+	}
+	if enable && !found {
+		lines = append(lines, "extension="+dll)
+	}
+	return os.WriteFile(path, []byte(strings.Join(lines, "\r\n")), 0644)
 }
 
 func validatePHP(ctx context.Context, php string) error {

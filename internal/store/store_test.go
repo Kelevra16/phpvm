@@ -69,6 +69,50 @@ func TestTransactionalInstallAndVerify(t *testing.T) {
 		t.Fatal("expected checksum failure")
 	}
 }
+
+func TestOfflineInstallUsesVerifiedArchiveCache(t *testing.T) {
+	archive := testArchive(t)
+	h := sha256.Sum256(archive)
+	digest := hex.EncodeToString(h[:])
+	root := t.TempDir()
+	cacheDir := filepath.Join(root, "cache", "archives")
+	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cacheDir, digest+".zip"), archive, 0644); err != nil {
+		t.Fatal(err)
+	}
+	s := New(root)
+	s.Offline = true
+	s.Validate = func(context.Context, string) error { return nil }
+	m := Metadata{Version: "8.4.1", Variant: "nts", Arch: "x64", URL: "https://invalid.example/php.zip", ArchiveSHA256: digest}
+	if err := s.Install(context.Background(), m); err != nil {
+		t.Fatal(err)
+	}
+	if !s.IsInstalled(m.ID()) {
+		t.Fatal("cached build not installed")
+	}
+}
+
+func TestOfflineInstallRejectsTamperedArchiveCache(t *testing.T) {
+	archive := testArchive(t)
+	h := sha256.Sum256(archive)
+	digest := hex.EncodeToString(h[:])
+	root := t.TempDir()
+	cacheDir := filepath.Join(root, "cache", "archives")
+	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cacheDir, digest+".zip"), []byte("tampered"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	s := New(root)
+	s.Offline = true
+	m := Metadata{Version: "8.4.1", Variant: "nts", Arch: "x64", URL: "https://invalid.example/php.zip", ArchiveSHA256: digest}
+	if err := s.Install(context.Background(), m); err == nil || !strings.Contains(err.Error(), "not available in cache") {
+		t.Fatalf("expected offline cache rejection, got %v", err)
+	}
+}
 func TestZipTraversalRejected(t *testing.T) {
 	var b bytes.Buffer
 	z := zip.NewWriter(&b)
@@ -100,5 +144,41 @@ func TestDynamicWrapperUsesProjectResolver(t *testing.T) {
 	wrapper := dynamicWrapper("php")
 	if !strings.Contains(wrapper, "phpvm resolve --path --tool php") {
 		t.Fatalf("wrapper does not use dynamic resolver: %s", wrapper)
+	}
+}
+
+func TestConfigureDefaultPHP(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "ext"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	template := ";extension=mbstring\nextension=mysqli\nextension=mysqli\n;extension=curl\nmemory_limit = 128M\n"
+	if err := os.WriteFile(filepath.Join(dir, "php.ini-development"), []byte(template), 0644); err != nil {
+		t.Fatal(err)
+	}
+	for _, dll := range []string{"php_mbstring.dll", "php_mysqli.dll", "php_curl.dll"} {
+		if err := os.WriteFile(filepath.Join(dir, "ext", dll), []byte("dll"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	enabled, err := configureDefaultPHP(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(enabled, ",") != "curl,mbstring,mysqli" {
+		t.Fatalf("enabled=%v", enabled)
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "php.ini"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(b)
+	for _, want := range []string{"extension=php_curl.dll", "extension=php_mbstring.dll", "extension=php_mysqli.dll", "memory_limit = 512M", "display_errors = On"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("php.ini lacks %q", want)
+		}
+	}
+	if strings.Count(text, "extension=php_mysqli.dll") != 2 {
+		t.Fatalf("expected one enabled and one commented normalized entry: %q", text)
 	}
 }

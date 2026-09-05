@@ -29,7 +29,11 @@ func main() {
 		defer cancel()
 	}
 	if err := app.New(version).Run(ctx, os.Args[1:]); err != nil {
-		fmt.Fprintln(os.Stderr, "phpvm:", err)
+		prefix := "x phpvm:"
+		if st, statErr := os.Stderr.Stat(); statErr == nil && st.Mode()&os.ModeCharDevice != 0 && os.Getenv("NO_COLOR") == "" {
+			prefix = "\x1b[31m×\x1b[0m phpvm:"
+		}
+		fmt.Fprintln(os.Stderr, prefix, err)
 		code := 1
 		if strings.HasPrefix(err.Error(), "usage:") || strings.HasPrefix(err.Error(), "unknown command") {
 			code = 2

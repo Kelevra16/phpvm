@@ -2,6 +2,8 @@ package app
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"strings"
@@ -53,5 +55,37 @@ func TestCompletionPowerShell(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "Register-ArgumentCompleter") {
 		t.Fatal("completion script missing registration")
+	}
+}
+
+func TestCacheBundleRoundTrip(t *testing.T) {
+	sourceRoot := t.TempDir()
+	payload := []byte("cached archive")
+	h := sha256.Sum256(payload)
+	digest := hex.EncodeToString(h[:])
+	archiveDir := filepath.Join(sourceRoot, "cache", "archives")
+	if err := os.MkdirAll(archiveDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(archiveDir, digest+".zip"), payload, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceRoot, "cache", "windows-releases.json"), []byte("{}"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	bundlePath := filepath.Join(t.TempDir(), "offline.zip")
+	var out bytes.Buffer
+	a := New("test")
+	a.Out = &out
+	if err := a.bundle(store.New(sourceRoot), []string{"create", bundlePath}); err != nil {
+		t.Fatal(err)
+	}
+	targetRoot := t.TempDir()
+	if err := a.bundle(store.New(targetRoot), []string{"import", bundlePath}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(filepath.Join(targetRoot, "cache", "archives", digest+".zip"))
+	if err != nil || string(got) != string(payload) {
+		t.Fatalf("round-trip payload=%q err=%v", got, err)
 	}
 }

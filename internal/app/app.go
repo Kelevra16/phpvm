@@ -20,13 +20,14 @@ import (
 type App struct {
 	Version  string
 	Out, Err io.Writer
+	ui       *console
 }
 
 func New(version string) *App { return &App{Version: version, Out: os.Stdout, Err: os.Stderr} }
 
 type buildOptions struct {
-	variant, arch                                                       string
-	json, quiet, noProgress, all, supportedOnly, allowUnverifiedArchive bool
+	variant, arch                                                                string
+	json, quiet, noProgress, all, supportedOnly, allowUnverifiedArchive, offline bool
 }
 
 func defaultOptions() buildOptions {
@@ -47,6 +48,7 @@ func parseBuildFlags(name string, args []string) (buildOptions, []string, error)
 	fs.BoolVar(&o.all, "all", false, "")
 	fs.BoolVar(&o.supportedOnly, "supported-only", false, "")
 	fs.BoolVar(&o.allowUnverifiedArchive, "allow-unverified-archive", false, "")
+	fs.BoolVar(&o.offline, "offline", false, "")
 	fs.StringVar(&o.arch, "arch", o.arch, "")
 	if err := fs.Parse(args); err != nil {
 		return o, nil, err
@@ -57,17 +59,27 @@ func parseBuildFlags(name string, args []string) (buildOptions, []string, error)
 	if o.arch != "x64" && o.arch != "x86" {
 		return o, nil, fmt.Errorf("arch must be x64 or x86")
 	}
+	if o.json {
+		o.quiet = true
+		o.noProgress = true
+	}
 	return o, fs.Args(), nil
 }
 
 func (a *App) Run(ctx context.Context, args []string) error {
+	args, plain, verbose := stripGlobalFlags(args)
+	a.ui = newConsole(a.Out, a.Err, plain, verbose)
 	root, err := rootDir()
 	if err != nil {
 		return err
 	}
 	s := store.New(root)
+	a.ui.Debug("root: %s", root)
 	if len(args) == 0 {
 		return a.smart(ctx, s)
+	}
+	if err := guardRiskyCommand(s, args); err != nil {
+		return err
 	}
 	switch args[0] {
 	case "help", "-h", "--help":
@@ -84,6 +96,16 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return a.remote(ctx, args[1:])
 	case "info":
 		return a.info(ctx, s, args[1:])
+	case "status":
+		return a.status(s, args[1:])
+	case "trust":
+		return a.trust(s, args[1:])
+	case "check":
+		return a.checkProject(s, args[1:])
+	case "serve":
+		return a.serve(ctx, s, args[1:])
+	case "pie":
+		return a.pie(ctx, s, args[1:])
 	case "supported":
 		return a.supported(ctx, s, args[1:])
 	case "runtime":
@@ -98,6 +120,8 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return a.shell(ctx, s, args[1:])
 	case "cache":
 		return a.cache(s, args[1:])
+	case "bundle":
+		return a.bundle(s, args[1:])
 	case "self-update":
 		return a.selfUpdate(ctx, args[1:])
 	case "completion":
@@ -109,6 +133,9 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	case "repair":
 		return a.repair(ctx, s, args[1:])
 	case "doctor":
+		if len(args) == 2 && args[1] == "--fix" {
+			return a.doctorFix(s)
+		}
 		return a.doctor(s, args[1:])
 	case "clean":
 		removed, err := s.Clean()
@@ -187,7 +214,7 @@ func (a *App) installCommand(ctx context.Context, s *store.Store, command string
 			return err
 		}
 		if !o.quiet {
-			fmt.Fprintln(a.Out, "Using PHP", id)
+			a.ui.Success("Using PHP %s", id)
 		}
 	}
 	if o.json {
@@ -220,7 +247,7 @@ func (a *App) install(ctx context.Context, s *store.Store, requested string, o b
 	// Imported and custom builds may not exist in the official registry.
 	if s.IsInstalled(requested) {
 		if !o.quiet {
-			fmt.Fprintln(a.Out, "PHP", requested, "is already installed")
+			a.ui.Info("PHP %s is already installed", requested)
 		}
 		return requested, nil
 	}
@@ -228,45 +255,42 @@ func (a *App) install(ctx context.Context, s *store.Store, requested string, o b
 	if err != nil {
 		return "", err
 	}
+	p.SetOffline(o.offline)
 	rel, err := p.Resolve(ctx, requested, o.variant, o.arch)
 	if err != nil {
 		return "", err
 	}
+	a.ui.Debug("resolved %s to %s (%s/%s)", requested, rel.Version, rel.Variant, rel.Arch)
 	if rel.Archived && rel.SHA256 == "" && !o.allowUnverifiedArchive {
 		return "", fmt.Errorf("PHP %s is in the official EOL archive, which does not publish SHA-256 checksums; review the risk and retry with --allow-unverified-archive", rel.Version)
 	}
 	if windowsphp.IsEOL(rel.Version, time.Now()) && !o.quiet {
-		fmt.Fprintln(a.Err, "Warning: PHP", rel.Version, "is end-of-life and no longer receives security fixes.")
+		a.ui.Warn("PHP %s is end-of-life and no longer receives security fixes.", rel.Version)
 	}
 	m := store.Metadata{Version: rel.Version, Variant: rel.Variant, Arch: rel.Arch, URL: rel.URL, ArchiveSHA256: rel.SHA256, Runtime: windowsphp.CompilerRuntime(rel.Version), SourceKind: "official"}
 	if s.IsInstalled(m.ID()) {
 		if !o.quiet {
-			fmt.Fprintln(a.Out, "PHP", m.ID(), "is already installed")
+			a.ui.Info("PHP %s is already installed", m.ID())
 		}
 		return m.ID(), nil
 	}
 	if !o.quiet {
-		fmt.Fprintln(a.Out, "Installing PHP", m.ID()+"...")
+		a.ui.Info("Installing PHP %s", m.ID())
 	}
 	if !o.quiet && !o.noProgress {
-		last := -1
 		s.Progress = func(done, total int64) {
-			if total <= 0 {
-				return
-			}
-			percent := int(done * 100 / total)
-			if percent/10 != last/10 {
-				fmt.Fprintf(a.Out, "Downloading %d%%\n", percent)
-				last = percent
-			}
+			a.ui.Progress(done, total)
 		}
 		defer func() { s.Progress = nil }()
 	}
+	previousOffline := s.Offline
+	s.Offline = o.offline
+	defer func() { s.Offline = previousOffline }()
 	if err := s.Install(ctx, m); err != nil {
 		return "", err
 	}
 	if !o.quiet {
-		fmt.Fprintln(a.Out, "Installed PHP", m.ID())
+		a.ui.Success("PHP %s installed", m.ID())
 	}
 	return m.ID(), nil
 }
@@ -307,13 +331,15 @@ func (a *App) list(s *store.Store, args []string) error {
 	if asJSON {
 		return json.NewEncoder(a.Out).Encode(map[string]any{"current": current, "builds": builds})
 	}
+	rows := make([][]string, 0, len(builds))
 	for _, m := range builds {
-		mark := "  "
+		mark := ""
 		if m.ID() == current {
-			mark = "* "
+			mark = a.ui.symbol("●", "*")
 		}
-		fmt.Fprintln(a.Out, mark+m.ID())
+		rows = append(rows, []string{mark, m.Version, m.Variant, m.Arch, m.Runtime})
 	}
+	a.ui.Table([]string{"", "VERSION", "TYPE", "ARCH", "RUNTIME"}, rows)
 	return nil
 }
 func (a *App) remote(ctx context.Context, args []string) error {
@@ -329,6 +355,7 @@ func (a *App) remote(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	p.SetOffline(o.offline)
 	var v []windowsphp.Release
 	if o.all {
 		v, err = p.AllVersions(ctx, o.variant, o.arch)
@@ -350,9 +377,15 @@ func (a *App) remote(ctx context.Context, args []string) error {
 	if o.json {
 		return json.NewEncoder(a.Out).Encode(v)
 	}
+	rows := make([][]string, 0, len(v))
 	for _, r := range v {
-		fmt.Fprintln(a.Out, r.Version, r.Variant, r.Arch)
+		status := "supported"
+		if windowsphp.IsEOL(r.Version, time.Now()) {
+			status = "EOL"
+		}
+		rows = append(rows, []string{r.Version, r.Variant, r.Arch, status})
 	}
+	a.ui.Table([]string{"VERSION", "TYPE", "ARCH", "STATUS"}, rows)
 	return nil
 }
 func (a *App) current(s *store.Store, args []string) error {
@@ -378,7 +411,7 @@ func (a *App) verify(s *store.Store, args []string) error {
 	if err := s.Verify(id); err != nil {
 		return fmt.Errorf("%s: %w", id, err)
 	}
-	fmt.Fprintln(a.Out, id, "OK")
+	a.ui.Success("%s verified", id)
 	return nil
 }
 func (a *App) repair(ctx context.Context, s *store.Store, args []string) error {
@@ -389,7 +422,7 @@ func (a *App) repair(ctx context.Context, s *store.Store, args []string) error {
 	if err := s.Repair(ctx, id); err != nil {
 		return err
 	}
-	fmt.Fprintln(a.Out, "Repaired", id)
+	a.ui.Success("Repaired %s", id)
 	return nil
 }
 func targetBuild(s *store.Store, args []string) (string, error) {
@@ -460,9 +493,9 @@ func (a *App) doctor(s *store.Store, args []string) error {
 	}
 	failed := false
 	for _, c := range checks {
-		mark := "OK"
+		mark := a.ui.paint(ansiGreen, a.ui.symbol("✓", "OK"))
 		if !c.OK {
-			mark = "FAIL"
+			mark = a.ui.paint(ansiRed, a.ui.symbol("×", "FAIL"))
 			failed = true
 		}
 		fmt.Fprintf(a.Out, "%-4s %-20s %s\n", mark, c.Name, c.Detail)
@@ -630,20 +663,26 @@ func (a *App) help() {
 	fmt.Fprint(a.Out, `phpvm - PHP version and environment manager
 
 Usage:
-  phpvm use [--ts] [--arch x64|x86] [--allow-unverified-archive] <version>
-  phpvm install [--ts] [--arch x64|x86] [--allow-unverified-archive] <version>
+  phpvm [--plain|--no-color] [--verbose] <command>
+  phpvm use [--ts] [--arch x64|x86] [--offline] [--allow-unverified-archive] <version>
+  phpvm install [--ts] [--arch x64|x86] [--offline] [--allow-unverified-archive] <version>
   phpvm info [--json] <version>     phpvm supported [--json]
   phpvm ls [--json]                 phpvm ls-remote [--ts] [--all] [--json]
   phpvm current [--json]            phpvm verify [build]
-  phpvm which [build]               phpvm cache <dir|clear>
+  phpvm status [--json]             phpvm check [--json]
+  phpvm which [build]               phpvm cache <dir|list|verify|clear>
+  phpvm bundle <create|import> <file.zip>
   phpvm resolve [--path] [version]  phpvm shell [version|--current]
   phpvm self-update                 phpvm completion powershell
-  phpvm repair [build]              phpvm doctor [--json]
+  phpvm repair [build]              phpvm doctor [--json|--fix]
   phpvm exec [version] -- <command> phpvm matrix <versions...> -- <command>
   phpvm alias [ls|set|remove]        phpvm sync
-	phpvm lock | restore               phpvm composer [install|args...]
-	phpvm import <directory>            phpvm ext <ls|enable|disable|search|install|update>
-  phpvm ini <get|set>                phpvm profile <ls|create|set|use>
+  phpvm lock | restore               phpvm composer [install|args...]
+  phpvm trust <project|status|revoke> phpvm serve [--port 8080]
+  phpvm pie <setup|path|args...>      phpvm import <directory>
+  phpvm ini [target] <get|set>       phpvm profile <ls|create|set|use>
+  phpvm ini [target] preset <name>
+  phpvm ext [target] <ls|enable|disable|search|install|update>
   phpvm logs <path|show|tail|open|clear|doctor>
   phpvm laragon <detect|link|unlink>
   phpvm uninstall <build>            phpvm prune | clean

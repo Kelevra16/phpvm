@@ -36,7 +36,11 @@ type Provider struct {
 	cachePath        string
 	archiveCachePath string
 	cacheTTL         time.Duration
+	offline          bool
 }
+
+// SetOffline restricts release discovery to metadata already present in cache.
+func (p *Provider) SetOffline(offline bool) { p.offline = offline }
 
 func New(cacheRoot ...string) *Provider {
 	p := &Provider{client: &http.Client{Timeout: 30 * time.Second}, endpoint: releasesURL, archiveEndpoint: archivesURL, cacheTTL: 6 * time.Hour}
@@ -183,11 +187,14 @@ func (p *Provider) archiveRegistry(ctx context.Context) ([]byte, error) {
 
 func (p *Provider) fetchCached(ctx context.Context, endpoint, cachePath, label string) ([]byte, error) {
 	if cachePath != "" {
-		if st, err := os.Stat(cachePath); err == nil && time.Since(st.ModTime()) < p.cacheTTL {
+		if st, err := os.Stat(cachePath); err == nil && (p.offline || time.Since(st.ModTime()) < p.cacheTTL) {
 			if b, err := os.ReadFile(cachePath); err == nil {
 				return b, nil
 			}
 		}
+	}
+	if p.offline {
+		return nil, fmt.Errorf("offline mode: %s is not available in cache", label)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {

@@ -21,7 +21,7 @@ irm https://raw.githubusercontent.com/Kelevra16/phpvm/main/install.ps1 | iex
 Para instalar una versión específica:
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Kelevra16/phpvm/main/install.ps1))) -Version v0.2.0
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Kelevra16/phpvm/main/install.ps1))) -Version v0.5.0
 ```
 
 El instalador:
@@ -77,6 +77,8 @@ phpvm prune                       conserva únicamente la distribución activa
 
 Usa `--no-progress` en entornos no interactivos o `--quiet` para ocultar los mensajes de estado.
 
+Usa `phpvm install --offline 8.4` después de guardar en caché el registro y el archivo verificado correspondiente. El modo offline nunca recurre silenciosamente a la red.
+
 ### Versiones históricas y EOL
 
 `phpvm` indexa el archivo oficial de Windows desde PHP 5.2. Un selector de rama elige su último parche:
@@ -130,6 +132,21 @@ Las restricciones comunes de Composer se resuelven contra las ramas oficiales di
 
 ## Configuración, perfiles y extensiones
 
+Las instalaciones nuevas crean un `php.ini` de desarrollo activo en lugar de dejar PHP sin configurar. phpvm parte de `php.ini-development`, dirige `extension_dir` a la distribución administrada, establece límites prácticos para desarrollo local y habilita estas extensiones cuando vienen incluidas en la distribución oficial:
+
+```text
+curl, fileinfo, mbstring, openssl, intl,
+mysqli, pdo_mysql, gd, zip, sodium
+```
+
+El PHP resultante se ejecuta con `--version`, `--ini` y `-m` mientras aún está en staging. Una configuración que no pueda iniciar PHP nunca se publica. Las instalaciones existentes pueden adoptar el mismo perfil; esto reemplaza su `php.ini` actual:
+
+```text
+phpvm ini defaults --project
+phpvm ini defaults --global
+phpvm ini defaults --version 8.4
+```
+
 ```text
 phpvm ini get memory_limit
 phpvm ini set memory_limit 1G
@@ -146,6 +163,16 @@ phpvm profile use laravel
 phpvm ext ls
 phpvm ext enable curl
 phpvm ext disable curl
+```
+
+`ini` y `ext` modifican por defecto el PHP efectivo del directorio actual: la misma distribución mostrada por `phpvm resolve` y utilizada por `php -v`. Cuando sea necesario puede elegirse otro destino explícitamente:
+
+```text
+phpvm ext enable mbstring --project
+phpvm ext enable mbstring --global
+phpvm ext enable mbstring --version 8.5
+phpvm ini path --project
+phpvm ini set memory_limit 1G --version 8.5
 ```
 
 La administración de extensiones actualmente habilita o deshabilita DLL incluidas en la distribución oficial de PHP. La descarga y resolución de paquetes PECL externos será responsabilidad de un proveedor futuro.
@@ -242,7 +269,7 @@ phpvm which 8.3
 phpvm cache dir
 phpvm cache clear
 phpvm self-update
-phpvm self-update v0.2.0
+phpvm self-update v0.5.0
 ```
 
 `self-update` descarga la GitHub Release seleccionada, verifica su checksum SHA-256 publicado, prepara el ejecutable nuevo y sustituye el binario en ejecución cuando termina el comando.
@@ -334,6 +361,17 @@ La ubicación canónica es `%LOCALAPPDATA%\phpvm\bin\phpvm.exe`. Los instaladore
 
 ## Herramientas avanzadas de entorno
 
+Las terminales interactivas usan colores de estado, símbolos Unicode, tablas y una barra de descarga en la misma línea. Las redirecciones y CI cambian automáticamente a texto plano estable. También puede controlarse explícitamente:
+
+```powershell
+phpvm --plain ls-remote
+phpvm --no-color doctor
+phpvm --verbose install 8.4
+$env:NO_COLOR = "1"
+```
+
+La salida JSON nunca recibe decoración y los argumentos posteriores a `--` llegan intactos al comando hijo.
+
 ```text
 phpvm info 5.6 --json       disponibilidad, EOL, arquitectura y runtime del compilador
 phpvm supported             ramas que todavía reciben soporte de seguridad
@@ -364,6 +402,48 @@ Las instalaciones PHP existentes pueden copiarse al almacenamiento administrado 
 phpvm import C:\laragon\bin\php\php-8.3.0
 phpvm import C:\tools\custom-php --name 8.3.0-custom --ts --arch x64
 ```
+
+## Herramientas de flujo de la versión 0.5
+
+Inspecciona el entorno efectivo y valida los requisitos de plataforma de Composer:
+
+```text
+phpvm status
+phpvm status --json
+phpvm check
+phpvm doctor --fix
+```
+
+Aplica configuraciones INI prácticas con `phpvm ini preset development|production|testing|codeigniter|laravel|wordpress`. Solo se habilitan extensiones incluidas en la distribución oficial seleccionada.
+
+Los comandos que ejecutan configuración controlada por un proyecto requieren una decisión explícita de confianza. Cambiar `.php-version`, `phpvm.toml`, `phpvm.lock`, `composer.json` o `composer.lock` la invalida:
+
+```text
+phpvm trust project
+phpvm trust status
+phpvm serve --port 8080 --public public
+phpvm trust revoke
+```
+
+Configura `PHPVM_SAFE_MODE=1` para bloquear ejecución de comandos y flujos de paquetes externos. La integración con PIE usa el PHAR oficial y exige GitHub CLI para verificar la atestación del artefacto antes de instalarlo:
+
+```text
+phpvm pie setup
+phpvm pie install vendor/extension
+phpvm pie path
+```
+
+Los archivos PHP descargados permanecen en una caché direccionada por contenido y vuelven a verificarse antes de reutilizarse. Los bundles incluyen un manifiesto de checksums y rechazan rutas inseguras, permitiendo transferir metadatos oficiales y archivos verificados ya almacenados a otro equipo:
+
+```text
+phpvm cache list
+phpvm cache verify
+phpvm bundle create phpvm-offline.zip
+phpvm bundle import phpvm-offline.zip
+phpvm install --offline 8.4
+```
+
+Trata los bundles importados como archivos entregados por su remitente: el manifiesto detecta corrupción, pero no demuestra quién creó el bundle.
 
 ## Roadmap pendiente
 

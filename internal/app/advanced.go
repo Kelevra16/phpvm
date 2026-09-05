@@ -49,6 +49,7 @@ func (a *App) info(ctx context.Context, s *store.Store, args []string) error {
 	if err != nil {
 		return err
 	}
+	p.SetOffline(o.offline)
 	r, err := p.Resolve(ctx, rest[0], o.variant, o.arch)
 	if err != nil {
 		return err
@@ -57,10 +58,8 @@ func (a *App) info(ctx context.Context, s *store.Store, args []string) error {
 	if o.json || wantsJSON {
 		return json.NewEncoder(a.Out).Encode(data)
 	}
-	keys := []string{"version", "variant", "arch", "compilerRuntime", "archived", "eol", "officialChecksum", "installed", "url"}
-	for _, k := range keys {
-		fmt.Fprintf(a.Out, "%-18s %v\n", k+":", data[k])
-	}
+	rows := [][]string{{"Version", fmt.Sprint(data["version"])}, {"Variant", fmt.Sprint(data["variant"])}, {"Architecture", fmt.Sprint(data["arch"])}, {"Runtime", fmt.Sprint(data["compilerRuntime"])}, {"Archived", fmt.Sprint(data["archived"])}, {"EOL", fmt.Sprint(data["eol"])}, {"Official checksum", fmt.Sprint(data["officialChecksum"])}, {"Installed", fmt.Sprint(data["installed"])}, {"Source", fmt.Sprint(data["url"])}}
+	a.ui.Table([]string{"PROPERTY", "VALUE"}, rows)
 	return nil
 }
 
