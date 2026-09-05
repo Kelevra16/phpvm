@@ -10,7 +10,7 @@ import (
 
 func TestContainedPathRejectsProjectEscape(t *testing.T) {
 	root := t.TempDir()
-	if _, err := containedPath(root, "..\\outside"); err == nil {
+	if _, err := containedPath(root, filepath.Join("..", "outside")); err == nil {
 		t.Fatal("expected project escape rejection")
 	}
 	if p, err := containedPath(root, "public"); err != nil || p != filepath.Join(root, "public") {
