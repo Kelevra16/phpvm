@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.7.0-rc4] - 2026-09-05
+
+### Fixed
+
+- `self-update` now schedules replacement in a true no-window helper process instead of changing PowerShell's window style, preventing the active terminal from being minimized or hidden.
+
 ## [0.7.0-rc3] - 2026-09-05
 
 ### Fixed
@@ -94,7 +100,8 @@
 
 - First Windows release with version installation, TS/NTS and x64/x86 builds, project configuration, profiles, extensions, logs, diagnostics, integrity verification, aliases, execution matrices, and transactional storage.
 
-[Unreleased]: https://github.com/Kelevra16/phpvm/compare/v0.7.0-rc3...HEAD
+[Unreleased]: https://github.com/Kelevra16/phpvm/compare/v0.7.0-rc4...HEAD
+[0.7.0-rc4]: https://github.com/Kelevra16/phpvm/compare/v0.7.0-rc3...v0.7.0-rc4
 [0.7.0-rc3]: https://github.com/Kelevra16/phpvm/compare/v0.7.0-rc2...v0.7.0-rc3
 [0.7.0-rc2]: https://github.com/Kelevra16/phpvm/compare/v0.7.0-rc1...v0.7.0-rc2
 [0.7.0-rc1]: https://github.com/Kelevra16/phpvm/compare/v0.6.0...v0.7.0-rc1

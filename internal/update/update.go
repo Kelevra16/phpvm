@@ -10,7 +10,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -174,7 +173,6 @@ func extractExecutable(data []byte, dest string) error {
 func Schedule(r Result) error {
 	pid := os.Getpid()
 	script := fmt.Sprintf("Wait-Process -Id %d -ErrorAction SilentlyContinue; Move-Item -LiteralPath %s -Destination %s -Force", pid, psQuote(r.StagedPath), psQuote(r.CurrentPath))
-	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", script)
-	return cmd.Start()
+	return startReplacement(script)
 }
 func psQuote(v string) string { return "'" + strings.ReplaceAll(v, "'", "''") + "'" }
