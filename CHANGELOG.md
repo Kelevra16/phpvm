@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-05
+
+### Added
+
+- Stable interactive control center, dashboard, searchable version selectors, project initialization, guided diagnostics, safe confirmations, file shortcuts, localized Spanish flows, actionable errors, and staged installation feedback.
+
+### Fixed
+
+- First-use dashboard behavior and portable Linux race-test coverage validated during the release-candidate cycle.
+
 ## [0.6.0-rc2] - 2026-09-05
 
 ### Fixed
@@ -56,7 +66,8 @@
 
 - First Windows release with version installation, TS/NTS and x64/x86 builds, project configuration, profiles, extensions, logs, diagnostics, integrity verification, aliases, execution matrices, and transactional storage.
 
-[Unreleased]: https://github.com/Kelevra16/phpvm/compare/v0.6.0-rc2...HEAD
+[Unreleased]: https://github.com/Kelevra16/phpvm/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/Kelevra16/phpvm/compare/v0.6.0-rc2...v0.6.0
 [0.6.0-rc2]: https://github.com/Kelevra16/phpvm/compare/v0.6.0-rc1...v0.6.0-rc2
 [0.6.0-rc1]: https://github.com/Kelevra16/phpvm/compare/v0.5.0...v0.6.0-rc1
 [0.5.0]: https://github.com/Kelevra16/phpvm/compare/v0.1.0...v0.5.0

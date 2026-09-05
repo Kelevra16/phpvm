@@ -21,7 +21,7 @@ irm https://raw.githubusercontent.com/Kelevra16/phpvm/main/install.ps1 | iex
 Install a specific release:
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Kelevra16/phpvm/main/install.ps1))) -Version v0.5.0
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Kelevra16/phpvm/main/install.ps1))) -Version v0.6.0
 ```
 
 The installer:
@@ -269,7 +269,7 @@ phpvm which 8.3
 phpvm cache dir
 phpvm cache clear
 phpvm self-update
-phpvm self-update v0.5.0
+phpvm self-update v0.6.0
 ```
 
 `self-update` downloads the selected GitHub Release, verifies its published SHA-256 checksum, stages the new executable, and replaces the running binary after the command exits.
