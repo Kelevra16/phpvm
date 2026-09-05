@@ -445,7 +445,7 @@ phpvm install --offline 8.4
 
 Treat imported bundles as files from their sender: the manifest detects corruption but does not establish who created the bundle.
 
-## Friendly interface (v0.6)
+## Friendly interface
 
 Open the interactive control center when you prefer a guided workflow:
 
@@ -455,6 +455,8 @@ phpvm ui
 ```
 
 The control center provides a dashboard, numbered PHP selectors, project initialization, diagnostics, and direct access to the error log. It is enabled only in a real terminal; redirected output, JSON commands, CI, and `--plain` retain deterministic behavior.
+
+Decorated terminals use a branded banner, color-coded sections, emoji navigation, searchable choices, and subtle animated loading indicators. `phpvm help` keeps one command per entry and groups commands by workflow so it remains easy to scan. Animation and decoration are automatically disabled for redirected output and automation.
 
 The same features are available as focused commands:
 

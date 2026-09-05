@@ -35,3 +35,14 @@ func TestNoColorEnvironment(t *testing.T) {
 		t.Fatal("NO_COLOR was ignored")
 	}
 }
+
+func TestCommandHelpWrapsWithinClassicTerminal(t *testing.T) {
+	var out bytes.Buffer
+	c := newConsole(&out, &out, true, false)
+	c.Command("phpvm trust <project|status|revoke>", "Manage content-sensitive project trust without overflowing a classic terminal")
+	for _, line := range strings.Split(strings.TrimSpace(out.String()), "\n") {
+		if len(line) > 80 {
+			t.Fatalf("help line is too wide (%d): %q", len(line), line)
+		}
+	}
+}

@@ -126,9 +126,17 @@ func (a *App) selectOne(title string, options []string) (string, error) {
 	}
 	visible := options
 	for {
-		fmt.Fprintln(a.Out, title)
+		if a.ui != nil {
+			a.ui.Section(a.ui.symbol("◆", "=="), title)
+		} else {
+			fmt.Fprintln(a.Out, title)
+		}
 		for i, option := range visible {
-			fmt.Fprintf(a.Out, "  %d) %s\n", i+1, option)
+			number := fmt.Sprintf("%2d", i+1)
+			if a.ui != nil {
+				number = a.ui.paint(ansiCyan, number)
+			}
+			fmt.Fprintf(a.Out, "  %s  %s\n", number, option)
 		}
 		value, err := a.promptText(tr("Choose a number or type to filter", "Elige un número o escribe para filtrar"), "1")
 		if err != nil {
@@ -220,7 +228,12 @@ func (a *App) chooseRemote(ctx context.Context, s *store.Store, o buildOptions) 
 		return "", err
 	}
 	p.SetOffline(o.offline)
+	stop := func(bool) {}
+	if a.ui != nil {
+		stop = a.ui.Spinner(tr("Loading official PHP catalog...", "Consultando catálogo oficial de PHP..."))
+	}
 	releases, err := p.Versions(ctx, o.variant, o.arch)
+	stop(err == nil)
 	if err != nil {
 		return "", err
 	}
@@ -245,12 +258,7 @@ func (a *App) dashboard(s *store.Store, args []string) error {
 	if len(args) != 0 {
 		return fmt.Errorf("usage: phpvm dashboard")
 	}
-	fmt.Fprintln(a.Out, a.ui.paint(ansiCyan, "phpvm "+a.Version))
-	separator := strings.Repeat("─", 42)
-	if !a.ui.unicode {
-		separator = strings.Repeat("-", 42)
-	}
-	fmt.Fprintln(a.Out, separator)
+	a.ui.Banner(a.Version, tr("Your PHP workspace at a glance", "Tu entorno PHP de un vistazo"))
 	if err := a.status(s, nil); err != nil {
 		a.ui.Info(tr("No PHP is selected yet. Next: phpvm install", "Aún no hay un PHP seleccionado. Siguiente: phpvm install"))
 	}
@@ -264,24 +272,25 @@ func (a *App) interactiveUI(ctx context.Context, s *store.Store, args []string) 
 	if err := a.requireInteractive(); err != nil {
 		return err
 	}
+	a.ui.Banner(a.Version, tr("Interactive PHP workspace", "Centro de trabajo PHP interactivo"))
+	dashboardLabel := a.ui.symbol("📊  ", "") + tr("Dashboard", "Panel de estado")
+	activateLabel := a.ui.symbol("⚡  ", "") + tr("Activate installed PHP", "Activar PHP instalado")
+	installLabel := a.ui.symbol("📦  ", "") + tr("Install a PHP version", "Instalar una versión PHP")
+	initLabel := a.ui.symbol("🧭  ", "") + tr("Initialize this project", "Inicializar este proyecto")
+	doctorLabel := a.ui.symbol("🩺  ", "") + tr("Run diagnostics", "Ejecutar diagnóstico")
+	logsLabel := a.ui.symbol("📄  ", "") + tr("Open error log", "Abrir log de errores")
+	exitLabel := a.ui.symbol("↩  ", "") + tr("Exit", "Salir")
 	for {
-		fmt.Fprintln(a.Out)
 		choice, err := a.selectOne(tr("phpvm control center", "Centro de control phpvm"), []string{
-			tr("Dashboard", "Panel de estado"),
-			tr("Activate installed PHP", "Activar PHP instalado"),
-			tr("Install a PHP version", "Instalar una versión PHP"),
-			tr("Initialize this project", "Inicializar este proyecto"),
-			tr("Run diagnostics", "Ejecutar diagnóstico"),
-			tr("Open error log", "Abrir log de errores"),
-			tr("Exit", "Salir"),
+			dashboardLabel, activateLabel, installLabel, initLabel, doctorLabel, logsLabel, exitLabel,
 		})
 		if err != nil {
 			return err
 		}
 		switch choice {
-		case tr("Dashboard", "Panel de estado"):
+		case dashboardLabel:
 			_ = a.dashboard(s, nil)
-		case tr("Activate installed PHP", "Activar PHP instalado"):
+		case activateLabel:
 			id, e := a.chooseInstalled(s)
 			if e == nil {
 				e = s.Use(id)
@@ -291,7 +300,7 @@ func (a *App) interactiveUI(ctx context.Context, s *store.Store, args []string) 
 			} else {
 				a.ui.Success(tr("Using PHP %s", "Usando PHP %s"), id)
 			}
-		case tr("Install a PHP version", "Instalar una versión PHP"):
+		case installLabel:
 			version, e := a.chooseRemote(ctx, s, defaultOptions())
 			if e == nil {
 				_, e = a.install(ctx, s, version, defaultOptions())
@@ -299,11 +308,11 @@ func (a *App) interactiveUI(ctx context.Context, s *store.Store, args []string) 
 			if e != nil {
 				a.ui.Warn("%v", e)
 			}
-		case tr("Initialize this project", "Inicializar este proyecto"):
+		case initLabel:
 			if e := a.initProject(s, nil); e != nil {
 				a.ui.Warn("%v", e)
 			}
-		case tr("Run diagnostics", "Ejecutar diagnóstico"):
+		case doctorLabel:
 			if e := a.doctor(s, nil); e != nil {
 				fix, askErr := a.confirm(tr("Apply safe repairs?", "¿Aplicar reparaciones seguras?"), true)
 				if askErr != nil {
@@ -313,7 +322,7 @@ func (a *App) interactiveUI(ctx context.Context, s *store.Store, args []string) 
 					_ = a.doctorFix(s)
 				}
 			}
-		case tr("Open error log", "Abrir log de errores"):
+		case logsLabel:
 			if e := a.openTarget(s, []string{"logs"}); e != nil {
 				a.ui.Warn("%v", e)
 			}

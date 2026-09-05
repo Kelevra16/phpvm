@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.7.0-rc1] - 2026-09-05
+
+### Added
+
+- Rich terminal presentation with a branded PHPVM banner, color-coded command groups, emoji navigation, accessible numbered menus, filtered choices, and animated catalog loading.
+- Fully reorganized help output with one command per entry, concise descriptions, seven task-oriented sections, Spanish localization, and controlled wrapping for classic 80-column terminals.
+
 ## [0.6.0] - 2026-09-05
 
 ### Added
@@ -66,7 +73,8 @@
 
 - First Windows release with version installation, TS/NTS and x64/x86 builds, project configuration, profiles, extensions, logs, diagnostics, integrity verification, aliases, execution matrices, and transactional storage.
 
-[Unreleased]: https://github.com/Kelevra16/phpvm/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/Kelevra16/phpvm/compare/v0.7.0-rc1...HEAD
+[0.7.0-rc1]: https://github.com/Kelevra16/phpvm/compare/v0.6.0...v0.7.0-rc1
 [0.6.0]: https://github.com/Kelevra16/phpvm/compare/v0.6.0-rc2...v0.6.0
 [0.6.0-rc2]: https://github.com/Kelevra16/phpvm/compare/v0.6.0-rc1...v0.6.0-rc2
 [0.6.0-rc1]: https://github.com/Kelevra16/phpvm/compare/v0.5.0...v0.6.0-rc1

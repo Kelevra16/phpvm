@@ -445,7 +445,7 @@ phpvm install --offline 8.4
 
 Trata los bundles importados como archivos entregados por su remitente: el manifiesto detecta corrupción, pero no demuestra quién creó el bundle.
 
-## Interfaz amigable (v0.6)
+## Interfaz amigable
 
 Abre el centro de control cuando prefieras un flujo guiado:
 
@@ -455,6 +455,8 @@ phpvm ui
 ```
 
 El centro de control incluye un panel de estado, selectores PHP numerados, inicialización de proyectos, diagnóstico y acceso directo al log de errores. Solo se activa en una terminal real; la salida redirigida, los comandos JSON, CI y `--plain` mantienen un comportamiento determinista.
+
+Las terminales decoradas muestran un banner propio, secciones por color, navegación con emojis, opciones con búsqueda e indicadores de carga animados y discretos. `phpvm help` conserva un comando por entrada y los agrupa por flujo de trabajo para facilitar la lectura. Las animaciones y la decoración se desactivan automáticamente al redirigir la salida o ejecutar automatizaciones.
 
 Las mismas funciones están disponibles como comandos individuales:
 

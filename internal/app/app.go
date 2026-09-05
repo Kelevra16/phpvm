@@ -728,34 +728,75 @@ func rootDir() (string, error) {
 }
 
 func (a *App) help() {
-	fmt.Fprint(a.Out, `phpvm - PHP version and environment manager
+	a.ui.Banner(a.Version, tr("PHP version & workspace manager", "Gestor de versiones y entornos PHP"))
+	a.ui.Section(a.ui.symbol("⌨", "=="), tr("USAGE", "USO"))
+	fmt.Fprintln(a.Out, "  phpvm [--plain|--no-color] [--verbose] <command>")
+	fmt.Fprintln(a.Out, "  "+a.ui.paint(ansiDim, tr("Run 'phpvm ui' for the guided experience.", "Ejecuta 'phpvm ui' para usar la experiencia guiada.")))
 
-Usage:
-  phpvm [--plain|--no-color] [--verbose] <command>
-  phpvm use [--ts] [--arch x64|x86] [--offline] [--allow-unverified-archive] <version>
-  phpvm install [--ts] [--arch x64|x86] [--offline] [--allow-unverified-archive] <version>
-  phpvm info [--json] <version>     phpvm supported [--json]
-  phpvm ls [--json]                 phpvm ls-remote [--ts] [--all] [--json]
-  phpvm current [--json]            phpvm verify [build]
-  phpvm status [--json]             phpvm check [--json]
-  phpvm dashboard                   phpvm ui
-  phpvm init [--version V] [--preset P]
-  phpvm open <logs|ini|root>
-  phpvm which [build]               phpvm cache <dir|list|verify|clear>
-  phpvm bundle <create|import> <file.zip>
-  phpvm resolve [--path] [version]  phpvm shell [version|--current]
-  phpvm self-update                 phpvm completion powershell
-  phpvm repair [--yes] [build]      phpvm doctor [--json|--fix|--interactive]
-  phpvm exec [version] -- <command> phpvm matrix <versions...> -- <command>
-  phpvm alias [ls|set|remove]        phpvm sync
-  phpvm lock | restore               phpvm composer [install|args...]
-  phpvm trust <project|status|revoke> phpvm serve [--port 8080]
-  phpvm pie <setup|path|args...>      phpvm import <directory>
-  phpvm ini [target] <get|set>       phpvm profile <ls|create|set|use>
-  phpvm ini [target] preset <name>
-  phpvm ext [target] <ls|enable|disable|search|install|update>
-  phpvm logs <path|show|tail|open|clear|doctor>
-  phpvm laragon <detect|link|unlink>
-  phpvm uninstall [--yes] <build>    phpvm prune [--yes] | clean
-`)
+	type commandHelp struct{ command, en, es string }
+	group := func(icon, en, es string, commands []commandHelp) {
+		a.ui.Section(icon, tr(en, es))
+		for _, item := range commands {
+			a.ui.Command(item.command, tr(item.en, item.es))
+		}
+	}
+	group(a.ui.symbol("✨", "=="), "INTERACTIVE", "INTERACTIVO", []commandHelp{
+		{"phpvm ui", "Open the guided control center", "Abrir el centro de control guiado"},
+		{"phpvm dashboard", "Show the current workspace at a glance", "Mostrar el entorno actual de un vistazo"},
+		{"phpvm init [--version V] [--preset P]", "Initialize a project configuration", "Inicializar la configuración de un proyecto"},
+		{"phpvm open <logs|ini|root>", "Open a managed file or directory", "Abrir un archivo o directorio administrado"},
+	})
+	group(a.ui.symbol("🐘", "=="), "PHP VERSIONS", "VERSIONES PHP", []commandHelp{
+		{"phpvm use [options] [version]", "Install and activate PHP; omit version for a selector", "Instalar y activar PHP; omite la versión para elegir"},
+		{"phpvm install [options] [version]", "Install without changing the active version", "Instalar sin cambiar la versión activa"},
+		{"phpvm ls [--json]", "List installed builds", "Listar versiones instaladas"},
+		{"phpvm ls-remote [--all] [--json]", "Browse official PHP builds", "Explorar versiones oficiales de PHP"},
+		{"phpvm info [--json] <version>", "Inspect availability, lifecycle and runtime", "Consultar disponibilidad, ciclo de vida y runtime"},
+		{"phpvm supported [--json]", "List supported PHP release lines", "Listar líneas de PHP compatibles"},
+		{"phpvm current [--json]", "Show the globally active build", "Mostrar la versión global activa"},
+		{"phpvm which [build]", "Print the path to php.exe", "Mostrar la ruta de php.exe"},
+		{"phpvm uninstall [--yes] <build>", "Remove an installed build", "Eliminar una versión instalada"},
+		{"phpvm prune [--yes]", "Keep only the active build", "Conservar únicamente la versión activa"},
+	})
+	group(a.ui.symbol("🧭", "=="), "PROJECT WORKFLOWS", "FLUJOS DE PROYECTO", []commandHelp{
+		{"phpvm status [--json]", "Show effective PHP, INI and trust", "Mostrar PHP efectivo, INI y confianza"},
+		{"phpvm resolve [--path] [version]", "Resolve the effective project build", "Resolver la versión efectiva del proyecto"},
+		{"phpvm sync", "Install and apply the project environment", "Instalar y aplicar el entorno del proyecto"},
+		{"phpvm check [--json]", "Validate Composer platform requirements", "Validar requisitos de plataforma de Composer"},
+		{"phpvm lock", "Capture a reproducible environment", "Capturar un entorno reproducible"},
+		{"phpvm restore", "Restore the locked environment", "Restaurar el entorno bloqueado"},
+		{"phpvm trust <project|status|revoke>", "Manage content-sensitive project trust", "Administrar la confianza del proyecto"},
+		{"phpvm serve [--port 8080]", "Start the PHP development server", "Iniciar el servidor de desarrollo PHP"},
+	})
+	group(a.ui.symbol("⚙", "=="), "CONFIGURATION", "CONFIGURACIÓN", []commandHelp{
+		{"phpvm ini [target] <command>", "Inspect or change php.ini", "Consultar o modificar php.ini"},
+		{"phpvm ini [target] preset <name>", "Apply a framework-oriented preset", "Aplicar un preset orientado a frameworks"},
+		{"phpvm ext [target] <command>", "Manage PHP extensions", "Administrar extensiones PHP"},
+		{"phpvm profile <ls|create|set|use>", "Manage reusable INI profiles", "Administrar perfiles INI reutilizables"},
+		{"phpvm logs <show|tail|open|clear|doctor>", "Inspect and manage PHP error logs", "Consultar y administrar logs de errores"},
+	})
+	group(a.ui.symbol("⚡", "=="), "COMMAND EXECUTION", "EJECUCIÓN", []commandHelp{
+		{"phpvm shell [version|--current]", "Open an isolated PHP terminal", "Abrir una terminal PHP aislada"},
+		{"phpvm exec [version] -- <command>", "Run a command with one PHP build", "Ejecutar un comando con una versión PHP"},
+		{"phpvm matrix <versions...> -- <command>", "Run a command across PHP versions", "Ejecutar un comando en varias versiones"},
+		{"phpvm composer [install|args...]", "Run managed Composer", "Ejecutar Composer administrado"},
+		{"phpvm pie <setup|path|args...>", "Manage extensions through PIE", "Administrar extensiones mediante PIE"},
+	})
+	group(a.ui.symbol("🩺", "=="), "HEALTH & MAINTENANCE", "SALUD Y MANTENIMIENTO", []commandHelp{
+		{"phpvm doctor [--fix|--interactive]", "Diagnose and repair common problems", "Diagnosticar y reparar problemas comunes"},
+		{"phpvm verify [build]", "Verify installation integrity", "Verificar la integridad de una instalación"},
+		{"phpvm repair [--yes] [build]", "Reinstall from the recorded source", "Reinstalar desde el origen registrado"},
+		{"phpvm cache <dir|list|verify|clear>", "Manage the download cache", "Administrar la caché de descargas"},
+		{"phpvm bundle <create|import> <file.zip>", "Move verified cache data offline", "Transportar caché verificada sin conexión"},
+		{"phpvm self-update [version]", "Update phpvm securely", "Actualizar phpvm de forma segura"},
+		{"phpvm clean", "Remove abandoned temporary data", "Eliminar datos temporales abandonados"},
+	})
+	group(a.ui.symbol("🔌", "=="), "INTEGRATIONS & TOOLS", "INTEGRACIONES Y HERRAMIENTAS", []commandHelp{
+		{"phpvm import <directory>", "Import an existing PHP distribution", "Importar una distribución PHP existente"},
+		{"phpvm laragon <detect|link|unlink>", "Integrate managed builds with Laragon", "Integrar versiones administradas con Laragon"},
+		{"phpvm alias <ls|set|remove>", "Manage version aliases", "Administrar alias de versiones"},
+		{"phpvm completion powershell", "Generate PowerShell completion", "Generar autocompletado de PowerShell"},
+	})
+	fmt.Fprintln(a.Out)
+	a.ui.Info(tr("Tip: PHPVM_LANG=es translates guided output; --plain disables decoration.", "Consejo: PHPVM_LANG=es traduce la interfaz; --plain desactiva la decoración."))
 }
