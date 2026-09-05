@@ -390,11 +390,14 @@ External extension and Composer workflows:
 phpvm ext search redis
 phpvm ext install https://example.test/php_redis-compatible-build.zip
 phpvm ext update
-phpvm composer install
-phpvm composer --version
+phpvm composer setup
+phpvm trust project
+phpvm composer -- install
+phpvm composer -- --version
+phpvm composer 7.4 -- install
 ```
 
-External extension sources are recorded and refreshed from the same URL. Packages must already match PHP version, TS/NTS, architecture, and compiler runtime; phpvm does not guess binary compatibility or PECL dependencies. Composer is downloaded from its official stable channel and verified with its published SHA-256.
+External extension sources are recorded and refreshed from the same URL. Packages must already match PHP version, TS/NTS, architecture, and compiler runtime; phpvm does not guess binary compatibility or PECL dependencies. Composer is downloaded from its official stable channel and verified with its published SHA-256. Composer arguments always follow `--`; without an explicit version, phpvm uses the project-selected or globally active PHP build. A successful Composer run automatically records its expected `composer.lock` change, while changes to other trusted project configuration still require review.
 
 Existing PHP directories can be copied into managed storage without changing their source:
 
@@ -419,11 +422,17 @@ Apply practical INI presets with `phpvm ini preset development|production|testin
 Commands that execute project-controlled configuration require an explicit, content-sensitive trust decision. Changing `.php-version`, `phpvm.toml`, `phpvm.lock`, `composer.json`, or `composer.lock` invalidates it:
 
 ```text
+phpvm init --version 8.4 --preset development
 phpvm trust project
 phpvm trust status
+phpvm serve --port 8080
 phpvm serve --port 8080 --public public
 phpvm trust revoke
 ```
+
+`trust project` requires an initialized project because it fingerprints the project configuration. The normal first-run order is `phpvm init`, `phpvm trust project`, and then `phpvm serve` or another command that executes project-controlled configuration.
+
+`serve` uses the project root (`.`) as its document root by default. Frameworks that expose a dedicated web directory can pass `--public public`. The built-in server enables colored HTTP status and error output in an interactive terminal; global `--plain` disables those colors too.
 
 Set `PHPVM_SAFE_MODE=1` to block command execution and external package workflows. PIE support uses the official PHAR and requires GitHub CLI to verify its artifact attestation before installation:
 
@@ -454,7 +463,7 @@ $env:PHPVM_LANG = "es" # optional: Spanish interactive messages
 phpvm ui
 ```
 
-The control center provides a dashboard, numbered PHP selectors, project initialization, diagnostics, and direct access to the error log. It is enabled only in a real terminal; redirected output, JSON commands, CI, and `--plain` retain deterministic behavior.
+The control center provides a live workspace summary, descriptive action cards, and keyboard-navigable selectors. Use Up/Down and Enter, type to filter, or press Escape to return. Every nested selector includes a visible Back option; numbers remain available as a fallback. The screen refreshes between actions and pauses after results so output remains readable. It is enabled only in a real terminal; redirected output, JSON commands, CI, and `--plain` retain deterministic behavior.
 
 Decorated terminals use a branded banner, color-coded sections, emoji navigation, searchable choices, and subtle animated loading indicators. `phpvm help` keeps one command per entry and groups commands by workflow so it remains easy to scan. Animation and decoration are automatically disabled for redirected output and automation.
 

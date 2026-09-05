@@ -265,12 +265,20 @@ func (a *App) composer(ctx context.Context, s *store.Store, args []string) error
 	if err != nil {
 		return err
 	}
+	trustedBefore, _ := projectTrusted(s)
+	rootBefore, stableBefore, _ := projectStableFingerprint()
 	cmd := exec.CommandContext(ctx, s.Executable(id), append([]string{path}, args[sep+1:]...)...)
 	cmd.Env = append(os.Environ(), "COMPOSER_HOME="+filepath.Join(s.Root, "composer"), "COMPOSER_CACHE_DIR="+filepath.Join(s.Root, "cache", "composer"))
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = a.Out
 	cmd.Stderr = a.Err
-	return cmd.Run()
+	if err = cmd.Run(); err != nil {
+		return err
+	}
+	if trustedBefore {
+		return refreshProjectTrustAfterComposer(s, rootBefore, stableBefore)
+	}
+	return nil
 }
 
 func (a *App) installComposer(ctx context.Context, s *store.Store) error {

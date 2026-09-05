@@ -173,7 +173,7 @@ func TestConfigureDefaultPHP(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(b)
-	for _, want := range []string{"extension=php_curl.dll", "extension=php_mbstring.dll", "extension=php_mysqli.dll", "memory_limit = 512M", "display_errors = On"} {
+	for _, want := range []string{"extension=php_curl.dll", "extension=php_mbstring.dll", "extension=php_mysqli.dll", "memory_limit = 512M", "display_errors = On", "cli_server.color = 1"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("php.ini lacks %q", want)
 		}

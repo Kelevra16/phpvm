@@ -602,12 +602,33 @@ func (a *App) execute(ctx context.Context, s *store.Store, args []string) error 
 	if err != nil {
 		return err
 	}
-	cmd := exec.CommandContext(ctx, args[sep+1], args[sep+2:]...)
+	command := args[sep+1]
+	childArgs := append([]string(nil), args[sep+2:]...)
+	if strings.EqualFold(command, "php") || strings.EqualFold(command, "php.exe") {
+		command = s.Executable(id)
+		if containsArgument(childArgs, "-S") {
+			color := "0"
+			if a.ui != nil && a.ui.color {
+				color = "1"
+			}
+			childArgs = append([]string{"-d", "cli_server.color=" + color}, childArgs...)
+		}
+	}
+	cmd := exec.CommandContext(ctx, command, childArgs...)
 	cmd.Env = append(os.Environ(), "PATH="+filepath.Dir(s.Executable(id))+string(os.PathListSeparator)+os.Getenv("PATH"), "PHPVM_ACTIVE="+id)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = a.Out
 	cmd.Stderr = a.Err
 	return cmd.Run()
+}
+
+func containsArgument(args []string, target string) bool {
+	for _, arg := range args {
+		if arg == target {
+			return true
+		}
+	}
+	return false
 }
 
 func (a *App) alias(root string, args []string) error {
@@ -779,7 +800,7 @@ func (a *App) help() {
 		{"phpvm shell [version|--current]", "Open an isolated PHP terminal", "Abrir una terminal PHP aislada"},
 		{"phpvm exec [version] -- <command>", "Run a command with one PHP build", "Ejecutar un comando con una versión PHP"},
 		{"phpvm matrix <versions...> -- <command>", "Run a command across PHP versions", "Ejecutar un comando en varias versiones"},
-		{"phpvm composer [install|args...]", "Run managed Composer", "Ejecutar Composer administrado"},
+		{"phpvm composer [version] -- <args...>", "Run managed Composer (setup installs it)", "Ejecutar Composer administrado (setup lo instala)"},
 		{"phpvm pie <setup|path|args...>", "Manage extensions through PIE", "Administrar extensiones mediante PIE"},
 	})
 	group(a.ui.symbol("🩺", "=="), "HEALTH & MAINTENANCE", "SALUD Y MANTENIMIENTO", []commandHelp{

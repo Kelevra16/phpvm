@@ -392,7 +392,7 @@ func configureDefaultPHP(dir string) ([]string, error) {
 	if err := os.WriteFile(ini, content, 0644); err != nil {
 		return nil, err
 	}
-	settings := map[string]string{"extension_dir": `"` + filepath.Join(dir, "ext") + `"`, "error_reporting": "E_ALL", "display_errors": "On", "display_startup_errors": "On", "log_errors": "On", "memory_limit": "512M", "max_execution_time": "120"}
+	settings := map[string]string{"extension_dir": `"` + filepath.Join(dir, "ext") + `"`, "error_reporting": "E_ALL", "display_errors": "On", "display_startup_errors": "On", "log_errors": "On", "memory_limit": "512M", "max_execution_time": "120", "cli_server.color": "1"}
 	for key, value := range settings {
 		if err := setINIDirective(ini, key, value); err != nil {
 			return nil, err

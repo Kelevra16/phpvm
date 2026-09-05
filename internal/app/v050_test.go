@@ -50,6 +50,53 @@ func TestProjectTrustFollowsConfigAndInvalidatesOnChange(t *testing.T) {
 	}
 }
 
+func TestComposerLockRefreshPreservesTrustOnlyForExpectedLockChange(t *testing.T) {
+	s := store.New(t.TempDir())
+	project := t.TempDir()
+	composerJSON := filepath.Join(project, "composer.json")
+	composerLock := filepath.Join(project, "composer.lock")
+	if err := os.WriteFile(composerJSON, []byte(`{"require":{}}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	old, _ := os.Getwd()
+	_ = os.Chdir(project)
+	defer os.Chdir(old)
+	root, sum, err := projectFingerprint()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = rememberProjectTrust(s, root, sum); err != nil {
+		t.Fatal(err)
+	}
+	rootBefore, stableBefore, err := projectStableFingerprint()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(composerLock, []byte(`{"packages":[]}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if ok, _ := projectTrusted(s); ok {
+		t.Fatal("new composer.lock should initially invalidate trust")
+	}
+	if err = refreshProjectTrustAfterComposer(s, rootBefore, stableBefore); err != nil {
+		t.Fatal(err)
+	}
+	if ok, _ := projectTrusted(s); !ok {
+		t.Fatal("expected composer.lock change should preserve trust")
+	}
+
+	rootBefore, stableBefore, _ = projectStableFingerprint()
+	if err = os.WriteFile(composerJSON, []byte(`{"scripts":{"test":"unknown"}}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err = refreshProjectTrustAfterComposer(s, rootBefore, stableBefore); err != nil {
+		t.Fatal(err)
+	}
+	if ok, _ := projectTrusted(s); ok {
+		t.Fatal("composer.json change must still invalidate trust")
+	}
+}
+
 func TestSafeModeBlocksRiskyCommands(t *testing.T) {
 	s := store.New(t.TempDir())
 	t.Setenv("PHPVM_SAFE_MODE", "1")

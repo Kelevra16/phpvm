@@ -103,6 +103,12 @@ type trustDB map[string]string
 
 func trustPath(s *store.Store) string { return filepath.Join(s.Root, "trust.json") }
 func projectFingerprint() (string, string, error) {
+	return projectFingerprintWithComposerLock(true)
+}
+func projectStableFingerprint() (string, string, error) {
+	return projectFingerprintWithComposerLock(false)
+}
+func projectFingerprintWithComposerLock(includeComposerLock bool) (string, string, error) {
 	root, err := filepath.Abs(currentDir())
 	if err != nil {
 		return "", "", err
@@ -128,6 +134,9 @@ func projectFingerprint() (string, string, error) {
 	h := sha256.New()
 	found := false
 	for _, name := range names {
+		if name == "composer.lock" && !includeComposerLock {
+			continue
+		}
 		b, e := os.ReadFile(filepath.Join(root, name))
 		if e == nil {
 			found = true
@@ -139,6 +148,25 @@ func projectFingerprint() (string, string, error) {
 		return root, "", fmt.Errorf("no project configuration found")
 	}
 	return root, hex.EncodeToString(h.Sum(nil)), nil
+}
+func rememberProjectTrust(s *store.Store, root, sum string) error {
+	db, err := loadTrust(s)
+	if err != nil {
+		return err
+	}
+	db[root] = sum
+	return writeJSON(trustPath(s), db)
+}
+func refreshProjectTrustAfterComposer(s *store.Store, rootBefore, stableBefore string) error {
+	rootAfter, stableAfter, err := projectStableFingerprint()
+	if err != nil || rootAfter != rootBefore || !strings.EqualFold(stableAfter, stableBefore) {
+		return nil
+	}
+	root, sum, err := projectFingerprint()
+	if err != nil {
+		return err
+	}
+	return rememberProjectTrust(s, root, sum)
 }
 func loadTrust(s *store.Store) (trustDB, error) {
 	db := trustDB{}
@@ -166,6 +194,9 @@ func requireProjectTrust(s *store.Store, action string) error {
 	if safeMode() {
 		return fmt.Errorf("%s is disabled by PHPVM_SAFE_MODE", action)
 	}
+	if _, _, err := projectFingerprint(); err != nil {
+		return fmt.Errorf("project is not initialized: %w", err)
+	}
 	ok, e := projectTrusted(s)
 	if e != nil {
 		return e
@@ -189,8 +220,7 @@ func (a *App) trust(s *store.Store, args []string) error {
 	}
 	switch args[0] {
 	case "project":
-		db[root] = sum
-		if e = writeJSON(trustPath(s), db); e == nil {
+		if e = rememberProjectTrust(s, root, sum); e == nil {
 			fmt.Fprintln(a.Out, "Trusted", root)
 		}
 		return e
@@ -335,7 +365,7 @@ func (a *App) serve(ctx context.Context, s *store.Store, args []string) error {
 	if e := requireProjectTrust(s, "starting the development server"); e != nil {
 		return e
 	}
-	port, public, router := "8080", "public", ""
+	port, public, router := "8080", ".", ""
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--port", "--public", "--router":
@@ -365,13 +395,17 @@ func (a *App) serve(ctx context.Context, s *store.Store, args []string) error {
 		return e
 	}
 	if st, statErr := os.Stat(docroot); statErr != nil || !st.IsDir() {
-		return fmt.Errorf("public directory does not exist: %s", docroot)
+		return fmt.Errorf("document root directory does not exist: %s", docroot)
 	}
 	id, e := resolveRuntimeBuild(s, "")
 	if e != nil {
 		return e
 	}
-	cmdArgs := []string{"-S", "127.0.0.1:" + port, "-t", docroot}
+	color := "0"
+	if a.ui != nil && a.ui.color {
+		color = "1"
+	}
+	cmdArgs := []string{"-d", "cli_server.color=" + color, "-S", "127.0.0.1:" + port, "-t", docroot}
 	if router != "" {
 		p, e := containedPath(root, router)
 		if e != nil {

@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+## [0.7.0-rc2] - 2026-09-05
+
+### Fixed
+
+- Composer help and bilingual documentation now show the required `--` argument separator.
+- Successful Composer runs retain project trust when only the expected `composer.lock` content changed; modifications to other security-sensitive project files still invalidate trust.
+- Trust-protected commands now distinguish an uninitialized project from a stale trust decision and recommend the complete `init` → `trust` → command flow.
+- `serve` now defaults its document root to the project directory, while `--public public` remains available for framework layouts.
+- PHP built-in servers launched by `serve` or `exec ... -- php -S` now enable native status colors in interactive terminals and honor `--plain`; `exec` also resolves `php` directly to the selected managed build.
+
+### Added
+
+- A dashboard-style `phpvm ui` control center with a live workspace summary, descriptive action cards, searchable choices, screen refresh, keyboard exit, and readable result pauses.
+- Interactive selectors support Up/Down navigation, Enter selection, live text filtering, Escape/q navigation, and an explicit Back entry, while preserving numbered fallback input.
+
 ## [0.7.0-rc1] - 2026-09-05
 
 ### Added
@@ -73,7 +88,8 @@
 
 - First Windows release with version installation, TS/NTS and x64/x86 builds, project configuration, profiles, extensions, logs, diagnostics, integrity verification, aliases, execution matrices, and transactional storage.
 
-[Unreleased]: https://github.com/Kelevra16/phpvm/compare/v0.7.0-rc1...HEAD
+[Unreleased]: https://github.com/Kelevra16/phpvm/compare/v0.7.0-rc2...HEAD
+[0.7.0-rc2]: https://github.com/Kelevra16/phpvm/compare/v0.7.0-rc1...v0.7.0-rc2
 [0.7.0-rc1]: https://github.com/Kelevra16/phpvm/compare/v0.6.0...v0.7.0-rc1
 [0.6.0]: https://github.com/Kelevra16/phpvm/compare/v0.6.0-rc2...v0.6.0
 [0.6.0-rc2]: https://github.com/Kelevra16/phpvm/compare/v0.6.0-rc1...v0.6.0-rc2

@@ -390,11 +390,14 @@ Flujos para extensiones externas y Composer:
 phpvm ext search redis
 phpvm ext install https://example.test/php_redis-build-compatible.zip
 phpvm ext update
-phpvm composer install
-phpvm composer --version
+phpvm composer setup
+phpvm trust project
+phpvm composer -- install
+phpvm composer -- --version
+phpvm composer 7.4 -- install
 ```
 
-Las fuentes de extensiones externas se registran y actualizan desde la misma URL. Los paquetes deben coincidir con versión PHP, TS/NTS, arquitectura y compilador; phpvm no adivina la compatibilidad binaria ni dependencias PECL. Composer se descarga desde su canal estable oficial y se verifica con su SHA-256 publicado.
+Las fuentes de extensiones externas se registran y actualizan desde la misma URL. Los paquetes deben coincidir con versión PHP, TS/NTS, arquitectura y compilador; phpvm no adivina la compatibilidad binaria ni dependencias PECL. Composer se descarga desde su canal estable oficial y se verifica con su SHA-256 publicado. Los argumentos de Composer siempre van después de `--`; sin una versión explícita, phpvm usa la versión PHP del proyecto o la activa globalmente. Después de una ejecución exitosa, phpvm registra automáticamente el cambio esperado de `composer.lock`; cualquier cambio en otra configuración confiable del proyecto todavía requiere revisión.
 
 Las instalaciones PHP existentes pueden copiarse al almacenamiento administrado sin modificar su origen:
 
@@ -419,11 +422,17 @@ Aplica configuraciones INI prácticas con `phpvm ini preset development|producti
 Los comandos que ejecutan configuración controlada por un proyecto requieren una decisión explícita de confianza. Cambiar `.php-version`, `phpvm.toml`, `phpvm.lock`, `composer.json` o `composer.lock` la invalida:
 
 ```text
+phpvm init --version 8.4 --preset development
 phpvm trust project
 phpvm trust status
+phpvm serve --port 8080
 phpvm serve --port 8080 --public public
 phpvm trust revoke
 ```
+
+`trust project` requiere que el proyecto esté inicializado porque registra una huella de su configuración. El orden normal para el primer uso es `phpvm init`, `phpvm trust project` y después `phpvm serve` u otro comando que ejecute configuración controlada por el proyecto.
+
+`serve` usa por defecto la raíz del proyecto (`.`) como raíz pública. Los frameworks que exponen un directorio web dedicado pueden indicar `--public public`. El servidor integrado habilita colores para estados HTTP y errores en una terminal interactiva; la opción global `--plain` también los desactiva.
 
 Configura `PHPVM_SAFE_MODE=1` para bloquear ejecución de comandos y flujos de paquetes externos. La integración con PIE usa el PHAR oficial y exige GitHub CLI para verificar la atestación del artefacto antes de instalarlo:
 
@@ -454,7 +463,7 @@ $env:PHPVM_LANG = "es"
 phpvm ui
 ```
 
-El centro de control incluye un panel de estado, selectores PHP numerados, inicialización de proyectos, diagnóstico y acceso directo al log de errores. Solo se activa en una terminal real; la salida redirigida, los comandos JSON, CI y `--plain` mantienen un comportamiento determinista.
+El centro de control incluye un resumen en vivo del entorno, tarjetas descriptivas y selectores navegables con teclado. Usa Arriba/Abajo y Enter, escribe para filtrar o presiona Escape para volver. Cada selector secundario incluye una opción visible para regresar; los números siguen disponibles como alternativa. La pantalla se actualiza entre acciones y hace una pausa tras cada resultado para conservarlo legible. Solo se activa en una terminal real; la salida redirigida, los comandos JSON, CI y `--plain` mantienen un comportamiento determinista.
 
 Las terminales decoradas muestran un banner propio, secciones por color, navegación con emojis, opciones con búsqueda e indicadores de carga animados y discretos. `phpvm help` conserva un comando por entrada y los agrupa por flujo de trabajo para facilitar la lectura. Las animaciones y la decoración se desactivan automáticamente al redirigir la salida o ejecutar automatizaciones.
 

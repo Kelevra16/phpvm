@@ -27,6 +27,22 @@ type console struct {
 	progressLast                         int
 }
 
+func (c *console) Clear() {
+	if c.interactive && c.unicode {
+		fmt.Fprint(c.out, "\x1b[2J\x1b[H")
+	}
+}
+
+func (c *console) KeyValue(label, value string) {
+	fmt.Fprintf(c.out, "  %s  %s\n", c.paint(ansiDim, fmt.Sprintf("%-15s", label)), value)
+}
+
+func (c *console) MenuItem(number int, icon, label, description string) {
+	key := c.paint(ansiPurple+ansiBold, fmt.Sprintf("[%d]", number))
+	fmt.Fprintf(c.out, "  %s  %s %s\n", key, icon, c.paint(ansiBold, label))
+	fmt.Fprintf(c.out, "       %s\n\n", c.paint(ansiDim, description))
+}
+
 func (c *console) Banner(version, subtitle string) {
 	if !c.unicode {
 		fmt.Fprintf(c.out, "phpvm %s - %s\n\n", version, subtitle)

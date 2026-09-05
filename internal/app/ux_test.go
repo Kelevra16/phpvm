@@ -34,6 +34,24 @@ func TestSelectOneFiltersByText(t *testing.T) {
 	}
 }
 
+func TestSelectActionSupportsTextAndQuit(t *testing.T) {
+	actions := []controlAction{
+		{id: "install", label: "Install PHP", description: "Download a build"},
+		{id: "doctor", label: "Run diagnostics", description: "Check the environment"},
+	}
+	for _, tc := range []struct{ input, want string }{{"diagnostics\n", "doctor"}, {"q\n", "exit"}} {
+		var out bytes.Buffer
+		a := New("test")
+		a.In = strings.NewReader(tc.input)
+		a.Out = &out
+		a.ui = newConsole(&out, &out, true, false)
+		got, err := a.selectAction(actions)
+		if err != nil || got != tc.want {
+			t.Fatalf("input=%q action=%q err=%v", tc.input, got, err)
+		}
+	}
+}
+
 func TestConfirmAcceptsSpanishYes(t *testing.T) {
 	a := New("test")
 	a.In = strings.NewReader("sí\n")
@@ -53,6 +71,14 @@ func TestFriendlyErrorUsesConfiguredLanguage(t *testing.T) {
 	message = FriendlyError(assertError("PHP build 8.4 is not installed"))
 	if !strings.Contains(message, "Sugerencia") || !strings.Contains(message, "phpvm install") {
 		t.Fatalf("missing Spanish hint: %q", message)
+	}
+}
+
+func TestFriendlyErrorExplainsProjectInitializationBeforeTrust(t *testing.T) {
+	t.Setenv("PHPVM_LANG", "es")
+	message := FriendlyError(assertError("project is not initialized: no project configuration found"))
+	if !strings.Contains(message, "phpvm init --version") || !strings.Contains(message, "phpvm trust project") {
+		t.Fatalf("missing initialization flow: %q", message)
 	}
 }
 
