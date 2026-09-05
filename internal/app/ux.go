@@ -251,7 +251,10 @@ func (a *App) dashboard(s *store.Store, args []string) error {
 		separator = strings.Repeat("-", 42)
 	}
 	fmt.Fprintln(a.Out, separator)
-	return a.status(s, nil)
+	if err := a.status(s, nil); err != nil {
+		a.ui.Info(tr("No PHP is selected yet. Next: phpvm install", "Aún no hay un PHP seleccionado. Siguiente: phpvm install"))
+	}
+	return nil
 }
 
 func (a *App) interactiveUI(ctx context.Context, s *store.Store, args []string) error {

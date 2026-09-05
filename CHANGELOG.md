@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.6.0-rc2] - 2026-09-05
+
+### Fixed
+
+- The dashboard now presents an actionable empty state and exits successfully when no PHP build has been selected yet.
+- Dashboard labels and project trust status now follow `PHPVM_LANG=es`.
+
 ## [0.6.0-rc1] - 2026-09-05
 
 ### Added
@@ -49,7 +56,8 @@
 
 - First Windows release with version installation, TS/NTS and x64/x86 builds, project configuration, profiles, extensions, logs, diagnostics, integrity verification, aliases, execution matrices, and transactional storage.
 
-[Unreleased]: https://github.com/Kelevra16/phpvm/compare/v0.6.0-rc1...HEAD
+[Unreleased]: https://github.com/Kelevra16/phpvm/compare/v0.6.0-rc2...HEAD
+[0.6.0-rc2]: https://github.com/Kelevra16/phpvm/compare/v0.6.0-rc1...v0.6.0-rc2
 [0.6.0-rc1]: https://github.com/Kelevra16/phpvm/compare/v0.5.0...v0.6.0-rc1
 [0.5.0]: https://github.com/Kelevra16/phpvm/compare/v0.1.0...v0.5.0
 [0.1.0]: https://github.com/Kelevra16/phpvm/releases/tag/v0.1.0

@@ -39,8 +39,24 @@ func (a *App) status(s *store.Store, args []string) error {
 	if jsonOut {
 		return json.NewEncoder(a.Out).Encode(data)
 	}
-	rows := [][]string{{"Project", fmt.Sprint(data["project"])}, {"PHP effective", effective}, {"PHP global", global}, {"Configuration", cfg.Source}, {"php.ini", ini}, {"Extensions", fmt.Sprint(extCount)}, {"Trusted", fmt.Sprint(trusted)}, {"Safe mode", fmt.Sprint(safeMode())}}
-	a.ui.Table([]string{"PROPERTY", "VALUE"}, rows)
+	empty := tr("not set", "sin configurar")
+	show := func(value string) string {
+		if value == "" {
+			return empty
+		}
+		return value
+	}
+	rows := [][]string{
+		{tr("Project", "Proyecto"), fmt.Sprint(data["project"])},
+		{tr("Effective PHP", "PHP efectivo"), show(effective)},
+		{tr("Global PHP", "PHP global"), show(global)},
+		{tr("Configuration", "Configuración"), show(cfg.Source)},
+		{"php.ini", show(ini)},
+		{tr("Extensions", "Extensiones"), fmt.Sprint(extCount)},
+		{tr("Trusted", "Confiable"), fmt.Sprint(trusted)},
+		{tr("Safe mode", "Modo seguro"), fmt.Sprint(safeMode())},
+	}
+	a.ui.Table([]string{tr("PROPERTY", "PROPIEDAD"), tr("VALUE", "VALOR")}, rows)
 	return effectiveErr
 }
 
@@ -180,7 +196,8 @@ func (a *App) trust(s *store.Store, args []string) error {
 		return e
 	case "status":
 		ok := strings.EqualFold(db[root], sum)
-		fmt.Fprintln(a.Out, map[bool]string{true: "trusted", false: "untrusted"}[ok], root)
+		state := map[bool]string{true: tr("trusted", "confiable"), false: tr("untrusted", "no confiable")}[ok]
+		fmt.Fprintln(a.Out, state, root)
 		if !ok {
 			return fmt.Errorf("project trust is missing or stale")
 		}

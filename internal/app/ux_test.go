@@ -93,3 +93,17 @@ func TestWithoutYes(t *testing.T) {
 		t.Fatalf("args=%v yes=%v", args, yes)
 	}
 }
+
+func TestDashboardIsFriendlyWithoutActivePHP(t *testing.T) {
+	t.Setenv("PHPVM_LANG", "es")
+	var out bytes.Buffer
+	a := New("test")
+	a.Out = &out
+	a.ui = newConsole(&out, &out, true, false)
+	if err := a.dashboard(store.New(t.TempDir()), nil); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "sin configurar") || !strings.Contains(out.String(), "phpvm install") {
+		t.Fatalf("unexpected dashboard:\n%s", out.String())
+	}
+}
