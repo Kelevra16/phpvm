@@ -61,6 +61,9 @@ func (c *console) Debug(format string, v ...any) {
 		fmt.Fprintln(c.err, c.paint(ansiDim, "debug:")+" "+fmt.Sprintf(format, v...))
 	}
 }
+func (c *console) Step(format string, v ...any) {
+	fmt.Fprintln(c.out, "  "+c.paint(ansiCyan, c.symbol("◆", ">"))+" "+fmt.Sprintf(format, v...))
+}
 func (c *console) Progress(done, total int64) {
 	if total <= 0 {
 		return

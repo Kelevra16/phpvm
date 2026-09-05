@@ -106,7 +106,14 @@ type Store struct {
 	Root     string
 	Progress func(downloaded, total int64)
 	Validate func(context.Context, string) error
+	Stage    func(string)
 	Offline  bool
+}
+
+func (s *Store) stage(name string) {
+	if s.Stage != nil {
+		s.Stage(name)
+	}
 }
 
 func New(root string) *Store                   { return &Store{Root: root, Validate: validatePHP} }
@@ -212,6 +219,7 @@ func (s *Store) installUnlocked(ctx context.Context, m Metadata) error {
 		// Record the observed hash so repair and metadata remain reproducible.
 		m.ArchiveSHA256 = got
 	}
+	s.stage("Extracting archive")
 	stage, err := os.MkdirTemp(s.versionsDir(), ".install-")
 	if err != nil {
 		return err
@@ -228,6 +236,7 @@ func (s *Store) installUnlocked(ctx context.Context, m Metadata) error {
 	if err != nil {
 		return err
 	}
+	s.stage("Configuring php.ini and extensions")
 	enabled, err := configureDefaultPHP(stage)
 	if err != nil {
 		return fmt.Errorf("configure staged PHP: %w", err)
@@ -235,6 +244,7 @@ func (s *Store) installUnlocked(ctx context.Context, m Metadata) error {
 	m.INIProfile = "development"
 	m.DefaultExtensions = enabled
 	if s.Validate != nil {
+		s.stage("Validating PHP runtime")
 		if err := s.Validate(ctx, php); err != nil {
 			return fmt.Errorf("validate staged PHP: %w", err)
 		}
@@ -248,6 +258,7 @@ func (s *Store) installUnlocked(ctx context.Context, m Metadata) error {
 	if err := os.WriteFile(filepath.Join(stage, "phpvm.json"), append(b, '\n'), 0644); err != nil {
 		return err
 	}
+	s.stage("Publishing installation")
 	if err := renameWithRetry(stage, s.installation(m.ID())); err != nil {
 		return fmt.Errorf("publish installation: %w", err)
 	}
@@ -273,6 +284,7 @@ func (s *Store) obtainArchive(ctx context.Context, m Metadata, tmp *os.File) (st
 			if copyErr == nil && closeErr == nil {
 				got := hex.EncodeToString(h.Sum(nil))
 				if strings.EqualFold(got, expected) {
+					s.stage("Using verified cached archive")
 					return got, tmp.Close()
 				}
 			}
@@ -288,6 +300,7 @@ func (s *Store) obtainArchive(ctx context.Context, m Metadata, tmp *os.File) (st
 		tmp.Close()
 		return "", fmt.Errorf("offline mode: verified PHP archive is not available in cache")
 	}
+	s.stage("Downloading PHP archive")
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.URL, nil)
 	if err != nil {
 		tmp.Close()
@@ -313,6 +326,7 @@ func (s *Store) obtainArchive(ctx context.Context, m Metadata, tmp *os.File) (st
 		return "", err
 	}
 	got := hex.EncodeToString(h.Sum(nil))
+	s.stage("Verifying SHA-256 checksum")
 	if m.ArchiveSHA256 != "" && !strings.EqualFold(got, m.ArchiveSHA256) {
 		return "", fmt.Errorf("checksum mismatch: got %s", got)
 	}

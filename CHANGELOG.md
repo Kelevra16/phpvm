@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.6.0-rc1] - 2026-09-05
+
+### Added
+
+- User-friendly control center with `phpvm ui`, a compact `dashboard`, and numbered accessible selectors.
+- Interactive `use`/`install`, project initialization, guided diagnostics, and safe confirmations for destructive maintenance.
+- `phpvm open logs|ini|root`, actionable error hints, installation stage feedback, and Spanish interactive messages through `PHPVM_LANG=es`.
+
 ## [0.5.0] - 2026-09-04
 
 ### Added
@@ -41,6 +49,7 @@
 
 - First Windows release with version installation, TS/NTS and x64/x86 builds, project configuration, profiles, extensions, logs, diagnostics, integrity verification, aliases, execution matrices, and transactional storage.
 
-[Unreleased]: https://github.com/Kelevra16/phpvm/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/Kelevra16/phpvm/compare/v0.6.0-rc1...HEAD
+[0.6.0-rc1]: https://github.com/Kelevra16/phpvm/compare/v0.5.0...v0.6.0-rc1
 [0.5.0]: https://github.com/Kelevra16/phpvm/compare/v0.1.0...v0.5.0
 [0.1.0]: https://github.com/Kelevra16/phpvm/releases/tag/v0.1.0

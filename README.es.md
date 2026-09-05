@@ -445,6 +445,32 @@ phpvm install --offline 8.4
 
 Trata los bundles importados como archivos entregados por su remitente: el manifiesto detecta corrupción, pero no demuestra quién creó el bundle.
 
+## Interfaz amigable (v0.6)
+
+Abre el centro de control cuando prefieras un flujo guiado:
+
+```powershell
+$env:PHPVM_LANG = "es"
+phpvm ui
+```
+
+El centro de control incluye un panel de estado, selectores PHP numerados, inicialización de proyectos, diagnóstico y acceso directo al log de errores. Solo se activa en una terminal real; la salida redirigida, los comandos JSON, CI y `--plain` mantienen un comportamiento determinista.
+
+Las mismas funciones están disponibles como comandos individuales:
+
+```text
+phpvm dashboard
+phpvm use                         selector interactivo de versiones instaladas
+phpvm install                     selector interactivo de versiones remotas
+phpvm init --version 8.4 --preset codeigniter
+phpvm doctor --interactive
+phpvm open logs
+phpvm open ini
+phpvm open root
+```
+
+Las terminales interactivas solicitan confirmación antes de `uninstall`, `prune` y `repair`. La automatización puede usar `--yes`; los scripts no interactivos continúan sin prompts. Una instalación ahora indica sus etapas de descarga, checksum, extracción, configuración, validación del runtime y publicación. Los errores comunes incluyen una sugerencia breve con el siguiente comando recomendado.
+
 ## Roadmap pendiente
 
 - proveedores para Linux y macOS;

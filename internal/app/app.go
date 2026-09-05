@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"flag"
@@ -19,11 +20,15 @@ import (
 
 type App struct {
 	Version  string
+	In       io.Reader
 	Out, Err io.Writer
 	ui       *console
+	input    *bufio.Reader
 }
 
-func New(version string) *App { return &App{Version: version, Out: os.Stdout, Err: os.Stderr} }
+func New(version string) *App {
+	return &App{Version: version, In: os.Stdin, Out: os.Stdout, Err: os.Stderr}
+}
 
 type buildOptions struct {
 	variant, arch                                                                string
@@ -98,6 +103,14 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return a.info(ctx, s, args[1:])
 	case "status":
 		return a.status(s, args[1:])
+	case "dashboard":
+		return a.dashboard(s, args[1:])
+	case "ui":
+		return a.interactiveUI(ctx, s, args[1:])
+	case "init":
+		return a.initProject(s, args[1:])
+	case "open":
+		return a.openTarget(s, args[1:])
 	case "trust":
 		return a.trust(s, args[1:])
 	case "check":
@@ -136,6 +149,9 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		if len(args) == 2 && args[1] == "--fix" {
 			return a.doctorFix(s)
 		}
+		if len(args) == 2 && args[1] == "--interactive" {
+			return a.interactiveDoctor(s)
+		}
 		return a.doctor(s, args[1:])
 	case "clean":
 		removed, err := s.Clean()
@@ -171,12 +187,23 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	case "matrix":
 		return a.matrix(ctx, s, args[1:])
 	case "uninstall", "remove", "rm":
-		if len(args) != 2 {
-			return fmt.Errorf("usage: phpvm uninstall <build>")
+		uninstallArgs, yes := withoutYes(args[1:])
+		if len(uninstallArgs) != 1 {
+			return fmt.Errorf("usage: phpvm uninstall [--yes] <build>")
 		}
-		id, err := resolveInstalled(s, args[1])
+		id, err := resolveInstalled(s, uninstallArgs[0])
 		if err != nil {
 			return err
+		}
+		if a.canPrompt() && !yes {
+			confirmed, confirmErr := a.confirm(tr("Remove "+id+"?", "¿Eliminar "+id+"?"), false)
+			if confirmErr != nil {
+				return confirmErr
+			}
+			if !confirmed {
+				a.ui.Info(tr("Cancelled", "Cancelado"))
+				return nil
+			}
 		}
 		if err := s.Uninstall(id); err != nil {
 			return err
@@ -184,6 +211,20 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		fmt.Fprintln(a.Out, "Removed", id)
 		return nil
 	case "prune":
+		pruneArgs, yes := withoutYes(args[1:])
+		if len(pruneArgs) != 0 {
+			return fmt.Errorf("usage: phpvm prune [--yes]")
+		}
+		if a.canPrompt() && !yes {
+			confirmed, confirmErr := a.confirm(tr("Remove every build except the active one?", "¿Eliminar todas las versiones excepto la activa?"), false)
+			if confirmErr != nil {
+				return confirmErr
+			}
+			if !confirmed {
+				a.ui.Info(tr("Cancelled", "Cancelado"))
+				return nil
+			}
+		}
 		removed, err := s.Prune()
 		if err != nil {
 			return err
@@ -201,6 +242,18 @@ func (a *App) installCommand(ctx context.Context, s *store.Store, command string
 	o, rest, err := parseBuildFlags(command, args)
 	if err != nil {
 		return err
+	}
+	if len(rest) == 0 && a.canPrompt() {
+		var selected string
+		if command == "use" {
+			selected, err = a.chooseInstalled(s)
+		} else {
+			selected, err = a.chooseRemote(ctx, s, o)
+		}
+		if err != nil {
+			return err
+		}
+		rest = []string{selected}
 	}
 	if len(rest) != 1 {
 		return fmt.Errorf("usage: phpvm %s [--ts] [--arch x64|x86] [--allow-unverified-archive] <version>", command)
@@ -282,6 +335,10 @@ func (a *App) install(ctx context.Context, s *store.Store, requested string, o b
 			a.ui.Progress(done, total)
 		}
 		defer func() { s.Progress = nil }()
+	}
+	if !o.quiet {
+		s.Stage = func(stage string) { a.ui.Step("%s", translatedStage(stage)) }
+		defer func() { s.Stage = nil }()
 	}
 	previousOffline := s.Offline
 	s.Offline = o.offline
@@ -415,9 +472,20 @@ func (a *App) verify(s *store.Store, args []string) error {
 	return nil
 }
 func (a *App) repair(ctx context.Context, s *store.Store, args []string) error {
-	id, err := targetBuild(s, args)
+	clean, yes := withoutYes(args)
+	id, err := targetBuild(s, clean)
 	if err != nil {
 		return err
+	}
+	if a.canPrompt() && !yes {
+		confirmed, confirmErr := a.confirm(tr("Replace "+id+" from its recorded source?", "¿Reemplazar "+id+" desde su origen registrado?"), false)
+		if confirmErr != nil {
+			return confirmErr
+		}
+		if !confirmed {
+			a.ui.Info(tr("Cancelled", "Cancelado"))
+			return nil
+		}
 	}
 	if err := s.Repair(ctx, id); err != nil {
 		return err
@@ -670,11 +738,14 @@ Usage:
   phpvm ls [--json]                 phpvm ls-remote [--ts] [--all] [--json]
   phpvm current [--json]            phpvm verify [build]
   phpvm status [--json]             phpvm check [--json]
+  phpvm dashboard                   phpvm ui
+  phpvm init [--version V] [--preset P]
+  phpvm open <logs|ini|root>
   phpvm which [build]               phpvm cache <dir|list|verify|clear>
   phpvm bundle <create|import> <file.zip>
   phpvm resolve [--path] [version]  phpvm shell [version|--current]
   phpvm self-update                 phpvm completion powershell
-  phpvm repair [build]              phpvm doctor [--json|--fix]
+  phpvm repair [--yes] [build]      phpvm doctor [--json|--fix|--interactive]
   phpvm exec [version] -- <command> phpvm matrix <versions...> -- <command>
   phpvm alias [ls|set|remove]        phpvm sync
   phpvm lock | restore               phpvm composer [install|args...]
@@ -685,6 +756,6 @@ Usage:
   phpvm ext [target] <ls|enable|disable|search|install|update>
   phpvm logs <path|show|tail|open|clear|doctor>
   phpvm laragon <detect|link|unlink>
-  phpvm uninstall <build>            phpvm prune | clean
+  phpvm uninstall [--yes] <build>    phpvm prune [--yes] | clean
 `)
 }

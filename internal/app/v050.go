@@ -197,8 +197,7 @@ func (a *App) trust(s *store.Store, args []string) error {
 }
 
 func (a *App) applyINIPreset(id, dir, name string) error {
-	allowed := map[string]map[string]string{"development": {"display_errors": "On", "display_startup_errors": "On", "error_reporting": "E_ALL", "memory_limit": "512M"}, "production": {"display_errors": "Off", "display_startup_errors": "Off", "error_reporting": "E_ALL & ~E_DEPRECATED & ~E_STRICT", "memory_limit": "256M", "opcache.enable": "1"}, "testing": {"display_errors": "On", "error_reporting": "E_ALL", "memory_limit": "1G", "max_execution_time": "0"}, "codeigniter": {"display_errors": "On", "memory_limit": "512M"}, "laravel": {"display_errors": "On", "memory_limit": "512M"}, "wordpress": {"display_errors": "Off", "memory_limit": "256M"}}
-	settings, ok := allowed[strings.ToLower(name)]
+	settings, ok := presetSettings(name)
 	if !ok {
 		return fmt.Errorf("unknown preset %s; use development, production, testing, codeigniter, laravel, or wordpress", name)
 	}
