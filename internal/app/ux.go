@@ -16,7 +16,6 @@ import (
 
 	"github.com/Kelevra16/phpvm/internal/store"
 	"github.com/Kelevra16/phpvm/internal/windowsphp"
-	"golang.org/x/term"
 )
 
 var errMenuBack = errors.New("return to menu")
@@ -192,17 +191,17 @@ type controlAction struct {
 func (a *App) canKeyboardMenu() bool {
 	in, inOK := a.In.(*os.File)
 	_, outOK := a.Out.(*os.File)
-	return inOK && outOK && a.canPrompt() && term.IsTerminal(int(in.Fd()))
+	return inOK && outOK && a.canPrompt() && isMenuTerminal(int(in.Fd()))
 }
 
 func (a *App) keyboardMenu(title string, actions []controlAction) (string, error) {
 	in := a.In.(*os.File)
 	fd := int(in.Fd())
-	state, err := term.MakeRaw(fd)
+	restore, err := makeMenuRaw(fd)
 	if err != nil {
 		return "", err
 	}
-	defer term.Restore(fd, state)
+	defer restore()
 	fmt.Fprint(a.Out, "\x1b[?25l\x1b[s")
 	defer fmt.Fprint(a.Out, "\x1b[?25h\n")
 

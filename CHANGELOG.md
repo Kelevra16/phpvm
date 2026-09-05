@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.7.0-rc3] - 2026-09-05
+
+### Fixed
+
+- Keyboard menus now enable Windows virtual-terminal input explicitly, allowing Arrow and Escape keys to work while restoring the original console mode on exit.
+
 ## [0.7.0-rc2] - 2026-09-05
 
 ### Fixed
@@ -88,7 +94,8 @@
 
 - First Windows release with version installation, TS/NTS and x64/x86 builds, project configuration, profiles, extensions, logs, diagnostics, integrity verification, aliases, execution matrices, and transactional storage.
 
-[Unreleased]: https://github.com/Kelevra16/phpvm/compare/v0.7.0-rc2...HEAD
+[Unreleased]: https://github.com/Kelevra16/phpvm/compare/v0.7.0-rc3...HEAD
+[0.7.0-rc3]: https://github.com/Kelevra16/phpvm/compare/v0.7.0-rc2...v0.7.0-rc3
 [0.7.0-rc2]: https://github.com/Kelevra16/phpvm/compare/v0.7.0-rc1...v0.7.0-rc2
 [0.7.0-rc1]: https://github.com/Kelevra16/phpvm/compare/v0.6.0...v0.7.0-rc1
 [0.6.0]: https://github.com/Kelevra16/phpvm/compare/v0.6.0-rc2...v0.6.0
