@@ -171,8 +171,22 @@ func extractExecutable(data []byte, dest string) error {
 	return fmt.Errorf("release archive does not contain phpvm.exe")
 }
 func Schedule(r Result) error {
-	pid := os.Getpid()
-	script := fmt.Sprintf("Wait-Process -Id %d -ErrorAction SilentlyContinue; Move-Item -LiteralPath %s -Destination %s -Force", pid, psQuote(r.StagedPath), psQuote(r.CurrentPath))
-	return startReplacement(script)
+	backup := r.CurrentPath + ".old"
+	_ = os.Remove(backup)
+	if err := os.Rename(r.CurrentPath, backup); err != nil {
+		return fmt.Errorf("stage current executable: %w", err)
+	}
+	if err := os.Rename(r.StagedPath, r.CurrentPath); err != nil {
+		_ = os.Rename(backup, r.CurrentPath)
+		return fmt.Errorf("activate updated executable: %w", err)
+	}
+	return nil
 }
-func psQuote(v string) string { return "'" + strings.ReplaceAll(v, "'", "''") + "'" }
+
+// CleanupPrevious removes the executable retained during the last atomic swap.
+func CleanupPrevious() {
+	exe, err := os.Executable()
+	if err == nil {
+		_ = os.Remove(exe + ".old")
+	}
+}

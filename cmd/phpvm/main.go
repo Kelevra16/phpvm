@@ -11,11 +11,13 @@ import (
 	"time"
 
 	"github.com/Kelevra16/phpvm/internal/app"
+	"github.com/Kelevra16/phpvm/internal/update"
 )
 
 var version = "dev"
 
 func main() {
+	update.CleanupPrevious()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	if raw := os.Getenv("PHPVM_TIMEOUT"); raw != "" && raw != "0" {

@@ -311,6 +311,6 @@ func (a *App) selfUpdate(ctx context.Context, args []string) error {
 	if err := update.Schedule(result); err != nil {
 		return err
 	}
-	fmt.Fprintln(a.Out, "Prepared phpvm", result.Version+"; the executable will be replaced after this command exits")
+	fmt.Fprintln(a.Out, "Updated phpvm", result.Version+"; the next invocation will use the new executable")
 	return nil
 }

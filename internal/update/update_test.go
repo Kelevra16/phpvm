@@ -31,8 +31,25 @@ func TestExtractExecutable(t *testing.T) {
 		t.Fatalf("unexpected executable %q", got)
 	}
 }
-func TestPowerShellQuote(t *testing.T) {
-	if got := psQuote(`C:\It's\phpvm.exe`); got != `'C:\It''s\phpvm.exe'` {
-		t.Fatalf("unexpected quote %s", got)
+func TestScheduleSwapsExecutableTransactionally(t *testing.T) {
+	dir := t.TempDir()
+	current := filepath.Join(dir, "phpvm.exe")
+	staged := current + ".new"
+	if err := os.WriteFile(current, []byte("old"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(staged, []byte("new"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := Schedule(Result{CurrentPath: current, StagedPath: staged}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(current)
+	if err != nil || string(got) != "new" {
+		t.Fatalf("current=%q err=%v", got, err)
+	}
+	old, err := os.ReadFile(current + ".old")
+	if err != nil || string(old) != "old" {
+		t.Fatalf("backup=%q err=%v", old, err)
 	}
 }

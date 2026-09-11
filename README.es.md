@@ -8,7 +8,7 @@
 
 `phpvm` es un administrador de versiones y entornos PHP inspirado en [gobrew](https://github.com/kevincobain2000/gobrew). Instala distribuciones oficiales de PHP sin privilegios de administrador y proporciona un wrapper estable que no requiere reiniciar ni refrescar la terminal al cambiar de versión.
 
-> **Candidato a lanzamiento:** actualmente el administrador de binarios funciona con las distribuciones oficiales de Windows x64/x86. Linux y macOS todavía no están soportados.
+> **Compatibilidad de plataforma:** actualmente el administrador de binarios funciona con las distribuciones oficiales de Windows x64/x86. Linux y macOS todavía no están soportados.
 
 ## Instalación
 
@@ -21,7 +21,7 @@ irm https://raw.githubusercontent.com/Kelevra16/phpvm/main/install.ps1 | iex
 Para instalar una versión específica:
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Kelevra16/phpvm/main/install.ps1))) -Version v0.6.0
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Kelevra16/phpvm/main/install.ps1))) -Version v0.7.0
 ```
 
 El instalador:
@@ -269,7 +269,7 @@ phpvm which 8.3
 phpvm cache dir
 phpvm cache clear
 phpvm self-update
-phpvm self-update v0.6.0
+phpvm self-update v0.7.0
 ```
 
 `self-update` descarga la GitHub Release seleccionada, verifica su checksum SHA-256 publicado, prepara el ejecutable nuevo y sustituye el binario en ejecución cuando termina el comando.

@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-11
+
+### Added
+
+- A richer terminal experience with a branded banner, color-coded and task-oriented help, animated loading, and a dashboard-style `phpvm ui` control center.
+- Interactive selectors with Arrow/Enter navigation, live filtering, Escape/q navigation, explicit Back entries, and numbered-input fallback.
+
+### Changed
+
+- `serve` now uses the project directory as its default document root; framework projects can opt into `--public public`.
+- Composer examples document the required `--` separator, and trusted projects remain trusted when Composer only changes `composer.lock`.
+- The development baseline is Go 1.26 with Go 1.26.8 as the preferred toolchain.
+
+### Fixed
+
+- Windows menus explicitly enable and restore virtual-terminal input so Arrow and Escape keys work reliably.
+- Trust-protected commands distinguish uninitialized projects from stale trust and suggest the correct `init` → `trust` workflow.
+- PHP development servers preserve native status colors, and `exec` resolves `php` to the exact selected managed build.
+- `self-update` no longer launches any PowerShell helper. It atomically swaps the executable in-process and removes the retained `.old` file on the next run, eliminating terminal window-state changes.
+
 ## [0.7.0-rc5] - 2026-09-05
 
 ### Changed
@@ -107,7 +127,8 @@
 
 - First Windows release with version installation, TS/NTS and x64/x86 builds, project configuration, profiles, extensions, logs, diagnostics, integrity verification, aliases, execution matrices, and transactional storage.
 
-[Unreleased]: https://github.com/Kelevra16/phpvm/compare/v0.7.0-rc5...HEAD
+[Unreleased]: https://github.com/Kelevra16/phpvm/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/Kelevra16/phpvm/compare/v0.7.0-rc5...v0.7.0
 [0.7.0-rc5]: https://github.com/Kelevra16/phpvm/compare/v0.7.0-rc4...v0.7.0-rc5
 [0.7.0-rc4]: https://github.com/Kelevra16/phpvm/compare/v0.7.0-rc3...v0.7.0-rc4
 [0.7.0-rc3]: https://github.com/Kelevra16/phpvm/compare/v0.7.0-rc2...v0.7.0-rc3
