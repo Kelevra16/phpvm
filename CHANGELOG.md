@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- PHP provisioning downloads the maintained cURL CA bundle when available and configures `curl.cainfo` and `openssl.cafile`; `phpvm ini ca-update` refreshes it for existing builds.
+
+### Fixed
+
+- Offline PHP installations continue when the optional CA bundle cannot be fetched; TLS certificate verification remains enabled.
+
 ## [0.7.3] - 2026-10-22
 
 ### Fixed

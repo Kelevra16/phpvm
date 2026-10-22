@@ -150,6 +150,7 @@ phpvm ini defaults --version 8.4
 
 ```text
 phpvm ini get memory_limit
+phpvm ini ca-update
 phpvm ini set memory_limit 1G
 phpvm ini path
 phpvm ini show
@@ -165,6 +166,8 @@ phpvm ext ls
 phpvm ext enable curl
 phpvm ext disable curl
 ```
+
+When online, PHPVM provisions the maintained cURL CA bundle and configures both `curl.cainfo` and `openssl.cafile`. Refresh the bundle for the effective project build with `phpvm ini ca-update`. Offline PHP installation remains available; the CA bundle can be fetched later.
 
 `ini` and `ext` modify the effective PHP for the current directory by default—the same build reported by `phpvm resolve` and used by `php -v`. Override the target explicitly when needed:
 

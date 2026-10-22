@@ -156,6 +156,13 @@ func (a *App) ini(s *store.Store, args []string) error {
 		fmt.Fprintln(a.Out, "Enabled extensions:", strings.Join(extensions, ", "))
 		return nil
 	}
+	if len(args) == 1 && args[0] == "ca-update" {
+		if err := store.UpdateCABundle(dir); err != nil {
+			return err
+		}
+		fmt.Fprintln(a.Out, "Updated CA bundle for", id)
+		return nil
+	}
 	if len(args) == 2 && args[0] == "preset" {
 		return a.applyINIPreset(id, dir, args[1])
 	}
@@ -181,7 +188,7 @@ func (a *App) ini(s *store.Store, args []string) error {
 		fmt.Fprintln(a.Out, v)
 		return nil
 	}
-	return fmt.Errorf("usage: phpvm ini [--project|--global|--version <version>] path|show|diff|reset|defaults|preset <name>|get <key>|set <key> <value>")
+	return fmt.Errorf("usage: phpvm ini [--project|--global|--version <version>] path|show|diff|reset|defaults|ca-update|preset <name>|get <key>|set <key> <value>")
 }
 
 func resetINI(dir string) error {

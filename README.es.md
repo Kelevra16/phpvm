@@ -150,6 +150,7 @@ phpvm ini defaults --version 8.4
 
 ```text
 phpvm ini get memory_limit
+phpvm ini ca-update
 phpvm ini set memory_limit 1G
 phpvm ini path
 phpvm ini show
@@ -165,6 +166,8 @@ phpvm ext ls
 phpvm ext enable curl
 phpvm ext disable curl
 ```
+
+Cuando hay conexión, PHPVM aprovisiona el bundle CA mantenido por cURL y configura `curl.cainfo` y `openssl.cafile`. Actualiza el bundle de la versión efectiva del proyecto con `phpvm ini ca-update`. La instalación sin conexión sigue disponible; el bundle puede descargarse después.
 
 `ini` y `ext` modifican por defecto el PHP efectivo del directorio actual: la misma distribución mostrada por `phpvm resolve` y utilizada por `php -v`. Cuando sea necesario puede elegirse otro destino explícitamente:
 

@@ -2,6 +2,7 @@ package store
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -373,6 +374,53 @@ func copyFile(source, destination string) error {
 
 var usefulDefaultExtensions = []string{"curl", "fileinfo", "mbstring", "openssl", "intl", "mysqli", "pdo_mysql", "gd", "zip", "sodium"}
 
+const caBundleURL = "https://curl.se/ca/cacert.pem"
+
+func configureCABundle(dir string) error {
+	path := filepath.Join(dir, "extras", "ssl", "cacert.pem")
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return err
+	}
+	client := &http.Client{Timeout: 30 * time.Second}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, caBundleURL, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("User-Agent", "phpvm-ca-bundle")
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("download CA bundle: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("download CA bundle: %s", resp.Status)
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 16<<20))
+	if err != nil {
+		return err
+	}
+	if !bytes.Contains(data, []byte("-----BEGIN CERTIFICATE-----")) {
+		return fmt.Errorf("downloaded CA bundle is invalid")
+	}
+	if !bytes.HasSuffix(data, []byte("\n")) {
+		data = append(data, '\n')
+	}
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return err
+	}
+	ini := filepath.Join(dir, "php.ini")
+	value := `"` + path + `"`
+	if err := setINIDirective(ini, "curl.cainfo", value); err != nil {
+		return err
+	}
+	return setINIDirective(ini, "openssl.cafile", value)
+}
+
+// UpdateCABundle refreshes the maintained CA set and points PHP's TLS clients at it.
+func UpdateCABundle(dir string) error { return configureCABundle(dir) }
+
 // ConfigureDefaults creates a practical development php.ini for an existing build.
 func ConfigureDefaults(dir string) ([]string, error) { return configureDefaultPHP(dir) }
 
@@ -398,6 +446,8 @@ func configureDefaultPHP(dir string) ([]string, error) {
 			return nil, err
 		}
 	}
+	// A temporary network failure must not prevent offline PHP provisioning.
+	_ = configureCABundle(dir)
 	var enabled []string
 	for _, name := range usefulDefaultExtensions {
 		dll := "php_" + name + ".dll"
