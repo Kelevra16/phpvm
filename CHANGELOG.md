@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-10-22
+
+### Fixed
+
+- Runtime resolution now honors the exact `config.platform.php` version from `composer.json` before the broader PHP requirement or the synthetic platform constraint recorded in `composer.lock`.
+
 ## [0.7.2] - 2026-10-22
 
 ### Fixed
@@ -141,7 +147,8 @@
 
 - First Windows release with version installation, TS/NTS and x64/x86 builds, project configuration, profiles, extensions, logs, diagnostics, integrity verification, aliases, execution matrices, and transactional storage.
 
-[Unreleased]: https://github.com/Kelevra16/phpvm/compare/v0.7.2...HEAD
+[Unreleased]: https://github.com/Kelevra16/phpvm/compare/v0.7.3...HEAD
+[0.7.3]: https://github.com/Kelevra16/phpvm/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/Kelevra16/phpvm/compare/v0.7.1...v0.7.2
 [0.7.0]: https://github.com/Kelevra16/phpvm/compare/v0.7.0-rc5...v0.7.0
 [0.7.0-rc5]: https://github.com/Kelevra16/phpvm/compare/v0.7.0-rc4...v0.7.0-rc5

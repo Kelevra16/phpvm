@@ -48,22 +48,36 @@ func readProjectDir(dir string) (projectConfig, bool, error) {
 	} else if !os.IsNotExist(err) {
 		return projectConfig{}, false, err
 	}
-	for _, name := range []string{"composer.lock", "composer.json"} {
-		if b, err := os.ReadFile(filepath.Join(dir, name)); err == nil {
-			var data map[string]any
-			if json.Unmarshal(b, &data) == nil {
-				if p, ok := data["platform"].(map[string]any); ok {
-					if v, ok := p["php"].(string); ok {
-						return projectConfig{Version: constraintVersion(v), Source: name, INI: map[string]string{}}, true, nil
-					}
-				}
-				if req, ok := data["require"].(map[string]any); ok {
-					if v, ok := req["php"].(string); ok {
-						return projectConfig{Version: constraintVersion(v), Source: name, INI: map[string]string{}}, true, nil
+	if b, err := os.ReadFile(filepath.Join(dir, "composer.json")); err == nil {
+		var data map[string]any
+		if json.Unmarshal(b, &data) == nil {
+			if config, ok := data["config"].(map[string]any); ok {
+				if platform, ok := config["platform"].(map[string]any); ok {
+					if version, ok := platform["php"].(string); ok && version != "" {
+						return projectConfig{Version: version, Source: "composer.json config.platform.php", INI: map[string]string{}}, true, nil
 					}
 				}
 			}
+			if req, ok := data["require"].(map[string]any); ok {
+				if version, ok := req["php"].(string); ok {
+					return projectConfig{Version: constraintVersion(version), Source: "composer.json", INI: map[string]string{}}, true, nil
+				}
+			}
 		}
+	} else if !os.IsNotExist(err) {
+		return projectConfig{}, false, err
+	}
+	if b, err := os.ReadFile(filepath.Join(dir, "composer.lock")); err == nil {
+		var data map[string]any
+		if json.Unmarshal(b, &data) == nil {
+			if platform, ok := data["platform"].(map[string]any); ok {
+				if version, ok := platform["php"].(string); ok {
+					return projectConfig{Version: constraintVersion(version), Source: "composer.lock", INI: map[string]string{}}, true, nil
+				}
+			}
+		}
+	} else if !os.IsNotExist(err) {
+		return projectConfig{}, false, err
 	}
 	return projectConfig{}, false, nil
 }

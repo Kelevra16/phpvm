@@ -70,6 +70,38 @@ func TestResolveMissingProjectBuildSuggestsSync(t *testing.T) {
 	}
 }
 
+func TestComposerPlatformExactVersionOverridesRequirementAndLock(t *testing.T) {
+	s := store.New(t.TempDir())
+	id82 := addTestBuild(t, s, "8.2.35")
+	_ = addTestBuild(t, s, "8.5.12")
+	project := t.TempDir()
+	composerJSON := `{"require":{"php":"^8.2"},"config":{"platform":{"php":"8.2.35"}}}`
+	composerLock := `{"platform":{"php":"^8.2"}}`
+	if err := os.WriteFile(filepath.Join(project, "composer.json"), []byte(composerJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "composer.lock"), []byte(composerLock), 0644); err != nil {
+		t.Fatal(err)
+	}
+	old, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(project); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chdir(old)
+	t.Setenv("PHPVM_ACTIVE", "")
+	got, err := resolveRuntimeBuild(s, "")
+	if err != nil || got != id82 {
+		t.Fatalf("resolve got %q, want %q; err=%v", got, id82, err)
+	}
+	cfg, err := findProjectConfig()
+	if err != nil || cfg.Source != "composer.json config.platform.php" || cfg.Version != "8.2.35" {
+		t.Fatalf("config=%+v err=%v", cfg, err)
+	}
+}
+
 func TestEnvironmentTargetDefaultsToProjectAndSupportsOverrides(t *testing.T) {
 	s := store.New(t.TempDir())
 	id74 := addTestBuild(t, s, "7.4.33")
