@@ -237,7 +237,7 @@ phpvm shell --current  usa la distribución global en una terminal aislada
 El shim nativo `php.exe` resuelve una distribución en cada ejecución. Esto permite que agentes, instaladores de Composer y distintos directorios de proyecto encuentren PHP sin depender del manejo de archivos `.cmd` de cada shell. El wrapper anterior `php.cmd` se conserva por compatibilidad. La prioridad es:
 
 ```text
-PHPVM_ACTIVE → configuración del proyecto → distribución global activa
+configuración del proyecto → sesión PHPVM_ACTIVE → distribución global activa
 ```
 
 La configuración del proyecto puede provenir de `.php-version`, `phpvm.toml` o una restricción Composer soportada. El shim nunca descarga PHP implícitamente; si falta una distribución solicita ejecutar `phpvm sync`.

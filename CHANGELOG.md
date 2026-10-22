@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-10-22
+
+### Fixed
+
+- Project PHP configuration now takes precedence over inherited `PHPVM_ACTIVE`, preventing long-lived terminals and agents from using a stale session version inside another project.
+
+### Changed
+
+- Runtime resolution order is now project configuration → terminal-local `PHPVM_ACTIVE` → globally active build.
+
 ### Fixed
 
 - Installations and self-updates now provision a native `php.exe` shim beside `phpvm.exe`, allowing agents, Composer installers, and process launchers that ignore `.cmd` wrappers to discover the selected PHP build.
@@ -131,7 +141,8 @@
 
 - First Windows release with version installation, TS/NTS and x64/x86 builds, project configuration, profiles, extensions, logs, diagnostics, integrity verification, aliases, execution matrices, and transactional storage.
 
-[Unreleased]: https://github.com/Kelevra16/phpvm/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/Kelevra16/phpvm/compare/v0.7.2...HEAD
+[0.7.2]: https://github.com/Kelevra16/phpvm/compare/v0.7.1...v0.7.2
 [0.7.0]: https://github.com/Kelevra16/phpvm/compare/v0.7.0-rc5...v0.7.0
 [0.7.0-rc5]: https://github.com/Kelevra16/phpvm/compare/v0.7.0-rc4...v0.7.0-rc5
 [0.7.0-rc4]: https://github.com/Kelevra16/phpvm/compare/v0.7.0-rc3...v0.7.0-rc4

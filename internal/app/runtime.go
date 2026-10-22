@@ -54,14 +54,6 @@ func (a *App) resolve(s *store.Store, args []string) error {
 }
 
 func resolveRuntimeBuild(s *store.Store, explicit string) (string, error) {
-	if explicit == "" {
-		if active := os.Getenv("PHPVM_ACTIVE"); active != "" {
-			if s.IsInstalled(active) {
-				return active, nil
-			}
-			return "", fmt.Errorf("session build %s is no longer installed", active)
-		}
-	}
 	query := explicit
 	variant, arch := "", ""
 	source := ""
@@ -74,6 +66,14 @@ func resolveRuntimeBuild(s *store.Store, explicit string) (string, error) {
 		variant = cfg.Variant
 		arch = cfg.Arch
 		source = cfg.Source
+		if query == "" {
+			if active := os.Getenv("PHPVM_ACTIVE"); active != "" {
+				if s.IsInstalled(active) {
+					return active, nil
+				}
+				return "", fmt.Errorf("session build %s is no longer installed", active)
+			}
+		}
 	}
 	if query == "" {
 		return s.Current()

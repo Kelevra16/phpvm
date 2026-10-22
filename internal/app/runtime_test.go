@@ -46,8 +46,14 @@ func TestResolveRuntimePriority(t *testing.T) {
 		t.Fatalf("project resolve got %q, %v", got, err)
 	}
 	t.Setenv("PHPVM_ACTIVE", id84)
+	if got, err := resolveRuntimeBuild(s, ""); err != nil || got != id83 {
+		t.Fatalf("project config must override inherited session: got %q, %v", got, err)
+	}
+	if err := os.Remove(filepath.Join(project, ".php-version")); err != nil {
+		t.Fatal(err)
+	}
 	if got, err := resolveRuntimeBuild(s, ""); err != nil || got != id84 {
-		t.Fatalf("session resolve got %q, %v", got, err)
+		t.Fatalf("session resolve outside project got %q, %v", got, err)
 	}
 }
 func TestResolveMissingProjectBuildSuggestsSync(t *testing.T) {

@@ -237,7 +237,7 @@ phpvm shell --current  use the global build in an isolated shell
 The native `php.exe` shim resolves a build on every invocation, allowing agents, Composer installers, and different project directories to find PHP without shell-specific `.cmd` handling. The legacy `php.cmd` wrapper remains available for compatibility. Resolution priority is:
 
 ```text
-PHPVM_ACTIVE → project configuration → global current build
+project configuration → PHPVM_ACTIVE session → global current build
 ```
 
 Project configuration means `.php-version`, `phpvm.toml`, or the supported Composer constraint. The shim never downloads PHP implicitly; when a project build is missing it asks you to run `phpvm sync`.
