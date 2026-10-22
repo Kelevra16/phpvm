@@ -29,6 +29,7 @@ The installer:
 - selects the correct Windows x64/x86 artifact;
 - verifies it against the release SHA-256 manifest;
 - installs `phpvm.exe` under `%LOCALAPPDATA%\phpvm\bin`;
+- installs a native `php.exe` shim for Composer, agents, and non-shell process launchers;
 - adds both `phpvm` and its managed PHP wrapper directory to the user `PATH`.
 
 Open a new terminal if necessary, then run:
@@ -233,7 +234,7 @@ phpvm shell            resolve the current project and open a shell
 phpvm shell --current  use the global build in an isolated shell
 ```
 
-The stable `php.cmd` wrapper also resolves a build on every invocation, allowing different project directories to use different installed versions concurrently. Resolution priority is:
+The native `php.exe` shim resolves a build on every invocation, allowing agents, Composer installers, and different project directories to find PHP without shell-specific `.cmd` handling. The legacy `php.cmd` wrapper remains available for compatibility. Resolution priority is:
 
 ```text
 PHPVM_ACTIVE → project configuration → global current build

@@ -93,6 +93,11 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	case "version", "--version":
 		fmt.Fprintln(a.Out, "phpvm", a.Version)
 		return nil
+	case "_php-shim":
+		if len(args) < 2 || args[1] != "--" {
+			return fmt.Errorf("invalid internal PHP shim invocation")
+		}
+		return a.runPHP(ctx, s, args[2:])
 	case "install", "use":
 		return a.installCommand(ctx, s, args[0], args[1:])
 	case "list", "ls":
@@ -550,10 +555,15 @@ func (a *App) doctor(s *store.Store, args []string) error {
 			checks = append(checks, check{"Visual C++ " + runtimeName, runtimeErr == nil, detail})
 		}
 	}
-	_, e := os.Stat(filepath.Join(s.Root, "bin", "php.cmd"))
-	checks = append(checks, check{"PATH wrapper", e == nil, first(e, filepath.Join(s.Root, "bin", "php.cmd"))})
+	exe, exeErr := os.Executable()
+	nativeShim := ""
+	if exeErr == nil {
+		nativeShim = filepath.Join(filepath.Dir(exe), "php.exe")
+	}
+	_, e := os.Stat(nativeShim)
+	checks = append(checks, check{"native PHP shim", e == nil, first(e, nativeShim)})
 	found, e := exec.LookPath("php")
-	expected := strings.HasPrefix(strings.ToLower(found), strings.ToLower(filepath.Join(s.Root, "bin")))
+	expected := e == nil && sameExecutablePath(found, nativeShim)
 	checks = append(checks, check{"php resolution", e == nil && expected, first(e, found)})
 	asJSON := len(args) == 1 && args[0] == "--json"
 	if asJSON {
@@ -572,6 +582,15 @@ func (a *App) doctor(s *store.Store, args []string) error {
 		return fmt.Errorf("doctor found problems")
 	}
 	return nil
+}
+
+func sameExecutablePath(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	aa, errA := filepath.Abs(a)
+	bb, errB := filepath.Abs(b)
+	return errA == nil && errB == nil && strings.EqualFold(filepath.Clean(aa), filepath.Clean(bb))
 }
 func first(err error, ok string) string {
 	if err != nil {
@@ -616,6 +635,23 @@ func (a *App) execute(ctx context.Context, s *store.Store, args []string) error 
 	}
 	cmd := exec.CommandContext(ctx, command, childArgs...)
 	cmd.Env = append(os.Environ(), "PATH="+filepath.Dir(s.Executable(id))+string(os.PathListSeparator)+os.Getenv("PATH"), "PHPVM_ACTIVE="+id)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = a.Out
+	cmd.Stderr = a.Err
+	return cmd.Run()
+}
+
+func (a *App) runPHP(ctx context.Context, s *store.Store, args []string) error {
+	id, err := resolveRuntimeBuild(s, "")
+	if err != nil {
+		return err
+	}
+	php := s.Executable(id)
+	cmd := exec.CommandContext(ctx, php, args...)
+	cmd.Env = append(os.Environ(),
+		"PATH="+filepath.Dir(php)+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"PHPVM_ACTIVE="+id,
+	)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = a.Out
 	cmd.Stderr = a.Err

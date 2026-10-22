@@ -171,16 +171,111 @@ func extractExecutable(data []byte, dest string) error {
 	return fmt.Errorf("release archive does not contain phpvm.exe")
 }
 func Schedule(r Result) error {
+	shim := filepath.Join(filepath.Dir(r.CurrentPath), "php.exe")
+	shimBackup, shimHadPrevious, err := replaceFromCopy(r.StagedPath, shim)
+	if err != nil {
+		return fmt.Errorf("install native PHP shim: %w", err)
+	}
 	backup := r.CurrentPath + ".old"
 	_ = os.Remove(backup)
 	if err := os.Rename(r.CurrentPath, backup); err != nil {
+		rollbackReplacement(shim, shimBackup, shimHadPrevious)
 		return fmt.Errorf("stage current executable: %w", err)
 	}
 	if err := os.Rename(r.StagedPath, r.CurrentPath); err != nil {
 		_ = os.Rename(backup, r.CurrentPath)
+		rollbackReplacement(shim, shimBackup, shimHadPrevious)
 		return fmt.Errorf("activate updated executable: %w", err)
 	}
 	return nil
+}
+
+func replaceFromCopy(source, target string) (string, bool, error) {
+	stage := target + ".new"
+	backup := target + ".old"
+	_ = os.Remove(stage)
+	_ = os.Remove(backup)
+	in, err := os.Open(source)
+	if err != nil {
+		return backup, false, err
+	}
+	out, err := os.OpenFile(stage, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0755)
+	if err != nil {
+		in.Close()
+		return backup, false, err
+	}
+	_, copyErr := io.Copy(out, in)
+	closeInErr := in.Close()
+	closeOutErr := out.Close()
+	if copyErr != nil || closeInErr != nil || closeOutErr != nil {
+		_ = os.Remove(stage)
+		if copyErr != nil {
+			return backup, false, copyErr
+		}
+		if closeInErr != nil {
+			return backup, false, closeInErr
+		}
+		return backup, false, closeOutErr
+	}
+	hadPrevious := false
+	if _, err := os.Stat(target); err == nil {
+		hadPrevious = true
+		if err := os.Rename(target, backup); err != nil {
+			_ = os.Remove(stage)
+			return backup, false, err
+		}
+	} else if !os.IsNotExist(err) {
+		_ = os.Remove(stage)
+		return backup, false, err
+	}
+	if err := os.Rename(stage, target); err != nil {
+		if hadPrevious {
+			_ = os.Rename(backup, target)
+		}
+		return backup, false, err
+	}
+	return backup, hadPrevious, nil
+}
+
+func rollbackReplacement(target, backup string, hadPrevious bool) {
+	_ = os.Remove(target)
+	if hadPrevious {
+		_ = os.Rename(backup, target)
+	}
+}
+
+// EnsurePHPShim provisions the native launcher for release binaries and
+// refreshes it after migration from an updater that only replaced phpvm.exe.
+// Development builds are left untouched to avoid modifying source folders.
+func EnsurePHPShim(version string) error {
+	if version == "" || strings.EqualFold(version, "dev") {
+		return nil
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	return ensurePHPShim(exe)
+}
+
+func ensurePHPShim(exe string) error {
+	if !strings.EqualFold(filepath.Base(exe), "phpvm.exe") {
+		return nil
+	}
+	shim := filepath.Join(filepath.Dir(exe), "php.exe")
+	_, markerErr := os.Stat(exe + ".old")
+	_, shimErr := os.Stat(shim)
+	if os.IsNotExist(markerErr) && shimErr == nil {
+		return nil
+	}
+	if markerErr != nil && !os.IsNotExist(markerErr) {
+		return markerErr
+	}
+	if shimErr != nil && !os.IsNotExist(shimErr) {
+		return shimErr
+	}
+	_, _, err := replaceFromCopy(exe, shim)
+	return err
 }
 
 // CleanupPrevious removes the executable retained during the last atomic swap.
@@ -188,5 +283,6 @@ func CleanupPrevious() {
 	exe, err := os.Executable()
 	if err == nil {
 		_ = os.Remove(exe + ".old")
+		_ = os.Remove(filepath.Join(filepath.Dir(exe), "php.exe.old"))
 	}
 }

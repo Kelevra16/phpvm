@@ -52,4 +52,60 @@ func TestScheduleSwapsExecutableTransactionally(t *testing.T) {
 	if err != nil || string(old) != "old" {
 		t.Fatalf("backup=%q err=%v", old, err)
 	}
+	shim, err := os.ReadFile(filepath.Join(dir, "php.exe"))
+	if err != nil || string(shim) != "new" {
+		t.Fatalf("shim=%q err=%v", shim, err)
+	}
+}
+
+func TestScheduleUpdatesExistingPHPShim(t *testing.T) {
+	dir := t.TempDir()
+	current := filepath.Join(dir, "phpvm.exe")
+	staged := current + ".new"
+	shim := filepath.Join(dir, "php.exe")
+	for path, body := range map[string]string{current: "old phpvm", staged: "new binary", shim: "old shim"} {
+		if err := os.WriteFile(path, []byte(body), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := Schedule(Result{CurrentPath: current, StagedPath: staged}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(shim)
+	if err != nil || string(got) != "new binary" {
+		t.Fatalf("shim=%q err=%v", got, err)
+	}
+}
+
+func TestEnsurePHPShimAfterLegacyUpdate(t *testing.T) {
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "phpvm.exe")
+	if err := os.WriteFile(exe, []byte("new binary"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(exe+".old", []byte("old binary"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensurePHPShim(exe); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(filepath.Join(dir, "php.exe"))
+	if err != nil || string(got) != "new binary" {
+		t.Fatalf("shim=%q err=%v", got, err)
+	}
+}
+
+func TestEnsurePHPShimCreatesMissingShimForRelease(t *testing.T) {
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "phpvm.exe")
+	if err := os.WriteFile(exe, []byte("release binary"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensurePHPShim(exe); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(filepath.Join(dir, "php.exe"))
+	if err != nil || string(got) != "release binary" {
+		t.Fatalf("shim=%q err=%v", got, err)
+	}
 }

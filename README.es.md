@@ -29,6 +29,7 @@ El instalador:
 - selecciona el artefacto correcto para Windows x64/x86;
 - lo verifica contra el manifiesto SHA-256 de la release;
 - instala `phpvm.exe` en `%LOCALAPPDATA%\phpvm\bin`;
+- instala un shim nativo `php.exe` para Composer, agentes y procesos que no utilizan un shell;
 - añade al `PATH` del usuario tanto `phpvm` como el directorio de wrappers de PHP administrado.
 
 Abre una terminal nueva si es necesario y ejecuta:
@@ -233,7 +234,7 @@ phpvm shell            resuelve el proyecto actual y abre una terminal
 phpvm shell --current  usa la distribución global en una terminal aislada
 ```
 
-El wrapper estable `php.cmd` también resuelve una distribución en cada ejecución. Esto permite usar versiones distintas desde varios directorios al mismo tiempo. La prioridad es:
+El shim nativo `php.exe` resuelve una distribución en cada ejecución. Esto permite que agentes, instaladores de Composer y distintos directorios de proyecto encuentren PHP sin depender del manejo de archivos `.cmd` de cada shell. El wrapper anterior `php.cmd` se conserva por compatibilidad. La prioridad es:
 
 ```text
 PHPVM_ACTIVE → configuración del proyecto → distribución global activa

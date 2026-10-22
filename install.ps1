@@ -82,6 +82,16 @@ try {
     $staged = Join-Path $InstallDir "phpvm.exe.new"
     Copy-Item -LiteralPath $candidate -Destination $staged -Force
     Move-Item -LiteralPath $staged -Destination $destination -Force
+
+    $releaseVersion = [version](($tag.TrimStart("v") -split "-")[0])
+    if ($releaseVersion -ge [version]"0.7.1") {
+        # Native tools and agent runtimes often ignore php.cmd. Compatible
+        # releases also act as a lightweight launcher based on the file name.
+        $phpShim = Join-Path $InstallDir "php.exe"
+        $phpShimStaged = Join-Path $InstallDir "php.exe.new"
+        Copy-Item -LiteralPath $candidate -Destination $phpShimStaged -Force
+        Move-Item -LiteralPath $phpShimStaged -Destination $phpShim -Force
+    }
 } finally {
     Remove-Item -LiteralPath $temporary -Recurse -Force -ErrorAction SilentlyContinue
 }

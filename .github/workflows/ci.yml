@@ -67,4 +67,6 @@ jobs:
           .\install.ps1 -InstallDir $destination -NoPathUpdate
           if (Test-Path (Join-Path $env:PHPVM_ROOT "bin\phpvm.exe")) { throw "Legacy executable was not migrated" }
           if (-not (Test-Path (Join-Path $env:PHPVM_ROOT "bin\phpvm.exe.legacy"))) { throw "Legacy backup was not preserved" }
-          & (Join-Path $destination "phpvm.exe") version
+          $installed = (& (Join-Path $destination "phpvm.exe") version) -replace '^phpvm\s+', ''
+          $installedVersion = [version](($installed -split '-')[0])
+          if ($installedVersion -ge [version]"0.7.1" -and -not (Test-Path (Join-Path $destination "php.exe"))) { throw "Native PHP shim was not installed" }

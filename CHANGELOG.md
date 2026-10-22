@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Installations and self-updates now provision a native `php.exe` shim beside `phpvm.exe`, allowing agents, Composer installers, and process launchers that ignore `.cmd` wrappers to discover the selected PHP build.
+
 ## [0.7.0] - 2026-09-11
 
 ### Added
